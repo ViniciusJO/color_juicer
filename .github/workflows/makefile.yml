@@ -7,46 +7,37 @@ on:
     branches: [ "master" ]
 
 jobs:
-  build_v0_14_1:
+  # build_v0_14_1:
+
+    # runs-on: ubuntu-latest
+
+    # steps:
+    # - uses: actions/checkout@v4
+    # - uses: jetsung/install-zig@v0.0.3
+      # with:
+        # version: "0.14.1"
+
+    # - name: configure
+    #   run: ./configure
+
+    # - name: Build
+      # run: make
+
+    # - name: Run check
+    #   run: make check
+
+    # - name: Run distcheck
+    #   run: make distcheck
+
+  build_v0_15_1:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: jetsung/install-zig@v0.0.3
-      with:
-        version: "0.14.1" # optional, default is 
+      - uses: actions/checkout@v4
+      - uses: jetsung/install-zig@v0.0.3
+        with:
+          version: "0.15.1"
 
-    #- name: configure
-    #  run: ./configure
-
-    - name: Build
-      run: make
-
-    #- name: Run check
-    #  run: make check
-
-    #- name: Run distcheck
-    #  run: make distcheck
-
-  #build_v0_15_1:
-
-    #runs-on: ubuntu-latest
-
-    #steps:
-    #- uses: actions/checkout@v4
-    #- uses: jetsung/install-zig@v0.0.3
-      #with:
-        #version: "0.15.1" # optional, default is 
-
-    #- name: configure
-    #  run: ./configure
-
-    #- name: Build
-      #run: make
-
-    #- name: Run check
-    #  run: make check
-
-    #- name: Run distcheck
-    #  run: make distcheck
+      - name: Build
+        run: make

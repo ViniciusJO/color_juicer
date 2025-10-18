@@ -42,7 +42,7 @@ fn repartition(ms: *Means, cs: Colors) !*Means {
             if (vec4_dist(c, m.*.color) < vec4_dist(c, min.color))
                 min = m;
         }
-        try min.colors.append(c);
+        try min.colors.append(gpa, c);
         min.partition_size +|= 1;
     }
     return ms;
@@ -242,7 +242,7 @@ fn uniformSeeds3D(ms: *Means) !*Means {
 }
 
 pub fn kmeanspp_init(m: *Means, pixels: *Colors) !*Means {
-    const allocator = m.allocator;
+    const allocator = gpa;
 
     const n = pixels.items.len;
     const k = m.items.len;
@@ -338,12 +338,13 @@ pub fn main() !void {
 
     // _ = res;
     // std.debug.print("res: {}, w: {d}, h: {d}, c: {d}\n", .{ img[0], w, h, c });
-    var pixels = std.ArrayList(Color).init(gpa);
-    _ = try pixels.addOne();
+    var pixels = try std.ArrayList(Color).initCapacity(gpa, @as(usize, @intCast(w*h*c)));
+        //.init(gpa);
+    // _ = try pixels.addOne();
     var i: usize = 0;
     const size = w*h*c;
     while (i < size): (i += @intCast(c)) {
-        try pixels.append(Color {
+        try pixels.append(gpa, Color {
             img[i],
             img[i+1],
             img[i+2],
@@ -368,12 +369,12 @@ pub fn main() !void {
 
     // _ = stb_image_write.stbi_write_png("downsampled.png", new_w, new_h, new_c, @ptrCast(downsampled), new_w*4*@sizeOf(u8));
 
-    var pixels_1 = Colors.init(gpa);
-    _ = try pixels_1.addOne();
+    var pixels_1 = try Colors.initCapacity(gpa, 0);
+    // _ = try pixels_1.addOne();
     var j: usize = 0;
     const size_1 = new_w*new_h*4;
     while (j < size_1): (j += @intCast(new_c)) {
-        try pixels_1.append(Color {
+        try pixels_1.append(gpa, Color {
             downsampled[j],
             downsampled[j+1],
             downsampled[j+2],
@@ -381,11 +382,11 @@ pub fn main() !void {
         });
     }
 
-    var means = Means.init(gpa);
+    var means = try Means.initCapacity(gpa, 0);
     for (0..means_quant) |_| {
-        try means.append(Mean {
+        try means.append(gpa, Mean {
             .color = Color { 0, 0, 0, 0xFF },
-            .colors = std.ArrayList(Color).init(gpa),
+            .colors = try std.ArrayList(Color).initCapacity(gpa, 0),
             .dist = std.math.inf(f64),
             .partition_size = 0
         });
@@ -435,10 +436,10 @@ pub fn main() !void {
     // }
     // std.debug.print("\n\n", .{});
 
-    var complementary = Means.init(gpa);
+    var complementary = try Means.initCapacity(gpa, 0);
     for (means.items) |*m| {
         const comp = get_complementary(m.*.color);
-        try complementary.append(Mean{
+        try complementary.append(gpa, Mean{
             .color = comp,
             .colors = undefined,
             .dist = 0,
@@ -479,20 +480,27 @@ pub fn main() !void {
     // std.debug.print("\n\n", .{});
 
     for (means.items) |*m| {
+        var buff: [256]u8 = .{0}**256;
         const col = m.*.color;
-        try out_file.writer().print("{} {} {}\n", .{col[0], col[1], col[2]});
+        var writer = out_file.writer(&buff).interface;
+        try writer.print("{} {} {}\n", .{col[0], col[1], col[2]});
+        try writer.flush();
     }
     
     const clrs = means.items;
     const cclrs = complementary.items;
 
-    try out_ini_file.writer().print("[dyn_colors]\n", .{});
-    try out_ini_file.writer().print("prim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
-    try out_ini_file.writer().print("sec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
-    try out_ini_file.writer().print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
-    try out_ini_file.writer().print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
-    try out_ini_file.writer().print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
-
+    {
+        var buff: [256]u8 = .{0}**256;
+        var out_writer = out_ini_file.writer(&buff).interface;
+        try out_writer.print("[dyn_colors]\n", .{});
+        try out_writer.print("prim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+        try out_writer.print("sec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+        try out_writer.print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
+        try out_writer.print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
+        try out_writer.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+        // try out_writer.flush();
+    }
 
     // try std.io.getStdOut().writer().print("prim: {s}\n", .{ try color_string_(&"██", clrs[0].color) });
     // try std.io.getStdOut().writer().print("sec: {s}\n", .{ try color_string_(&"██", clrs[1].color) });
@@ -533,10 +541,15 @@ pub fn main() !void {
     // }
     // std.debug.print("\n\n", .{});
 
-    try out_ini_file.writer().print("pprim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
-    try out_ini_file.writer().print("psec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
-    try out_ini_file.writer().print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
-    try out_ini_file.writer().print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+    {
+        var buff: [256]u8 = .{0}**256;
+        var out_writer = out_ini_file.writer(&buff).interface;
+        try out_writer.print("pprim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+        try out_writer.print("psec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+        try out_writer.print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
+        try out_writer.print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+        // try out_writer.flush();
+    }
 
     // try out_i3_file.writer().print("set $text_focus   #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
     // try out_i3_file.writer().print("set $bg_normal    #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
@@ -569,19 +582,27 @@ pub fn main() !void {
     };
 
     // borda | fundo título | texto título | indicador | texto título (estado inverso)
-    try out_i3_file.writer().print("\nclient.focused {s} {s} {s} {s} {s}\n", .{
-        cs.complementary, // title border
-        cs.complementary, // title background
-        "#000000",        // title text
-        cs.terciary     , // indicator
-        cs.complementary  // border
-    });
+    {
+        var buff: [256]u8 = .{0}**256;
+        var out_i3_writer = out_i3_file.writer(&buff).interface;
+        try out_i3_writer.print("\nclient.focused {s} {s} {s} {s} {s}\n", .{
+            cs.complementary, // title border
+            cs.complementary, // title background
+            "#000000",        // title text
+            cs.terciary     , // indicator
+            cs.complementary  // border
+        });
+    }
 
 
-    try std.io.getStdOut().writer().print("pprim: {s} {s}\n", .{ try color_string_(&"██", clrs[0].color), color_to_rgb_str(clrs[0].color) });
-    try std.io.getStdOut().writer().print("psec:  {s} {s}\n", .{ try color_string_(&"██", clrs[1].color), color_to_rgb_str(clrs[1].color) });
-    try std.io.getStdOut().writer().print("pterc: {s} {s}\n", .{ try color_string_(&"██", clrs[2].color), color_to_rgb_str(clrs[2].color) });
-    try std.io.getStdOut().writer().print("pcont: {s} {s}\n", .{ try color_string_(&"██", comp_m), color_to_rgb_str(comp_m) });
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+    try stdout.print("pprim: {s} {s}\n", .{ try color_string_(&"██", clrs[0].color), color_to_rgb_str(clrs[0].color) });
+    try stdout.print("psec:  {s} {s}\n", .{ try color_string_(&"██", clrs[1].color), color_to_rgb_str(clrs[1].color) });
+    try stdout.print("pterc: {s} {s}\n", .{ try color_string_(&"██", clrs[2].color), color_to_rgb_str(clrs[2].color) });
+    try stdout.print("pcont: {s} {s}\n", .{ try color_string_(&"██", comp_m), color_to_rgb_str(comp_m) });
+    try stdout.flush();
 
 
     // for (means.items) |*m| {
