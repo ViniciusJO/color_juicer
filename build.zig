@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
     kmeans.addImport("stbir", stb_image_resize.createModule());
 
     // kmeans.addIncludeDir("src/stb");
-    kmeans.addCSourceFile(.{ .file = stb_imp, });
+    kmeans.addCSourceFile(.{ .file = stb_imp, .flags = &[_][]const u8{ "-fno-sanitize=undefined" } });
 
     // kmeans.addCSourceFiles(.{
     //     .files = &[_][]const u8 {
