@@ -21,13 +21,13 @@ For the image:
 
 extracts:
 
-- pprim: `#ECD5A5`
-- psec:  `#427B92`
-- pterc: `#ADA58C`
-- pcont: `#716365`
-
+- pprim:  ![#ecd5a5](https://placehold.co/15x15/ecd5a5/ecd5a5.png) `#ecd5a5`
+- psec:   ![#427b92](https://placehold.co/15x15/427b92/427b92.png) `#427b92`
+- pterc:  ![#ada58c](https://placehold.co/15x15/ada58c/ada58c.png) `#ada58c`
+- pcont:  ![#716365](https://placehold.co/15x15/716365/716365.png) `#716365`
+ 
 and generates:
-
+ 
 - on console
 
 ```
