@@ -20,10 +20,10 @@ For the image:
 - on console
 
 ```
-pprim: `#ECD5A5`
-psec:  `#427B92`
-pterc: `#ADA58C`
-pcont: `#716365`
+pprim: #ECD5A5
+psec:  #427B92
+pterc: #ADA58C
+pcont: #716365
 ```
 
 - on `$HOME/.cache/dyn_colors.ini`: 
