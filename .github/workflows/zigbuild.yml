@@ -44,7 +44,7 @@ jobs:
 
       - name: Compress binary
         run: |
-          tar czvf color_juicer_v${{ github.run_number }}.tar.gz color_juicer
+          cp zig-out/bin/color_juicer . && tar czvf color_juicer_v${{ github.run_number }}.tar.gz color_juicer
 
       - name: Create Release
         id: create_release
