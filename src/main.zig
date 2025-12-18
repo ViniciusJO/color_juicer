@@ -319,6 +319,18 @@ pub fn main() !void {
 
     const args = try std.process.argsAlloc(gpa);
 
+    // const f = try std.fs.cwd().createFile("test.txt", .{});
+    // defer f.close();
+    //
+    // var __b: [256]u8 = undefined;
+    // var v = f.writer(&__b);
+    // var in = &v.interface;
+    //
+    // try in.print("HEY\n", .{});
+    // try in.flush();
+    //
+    // if(true) return;
+
     // try std.io.getStdOut().writer().print("\n{}: {s}\n", .{ args.len, args });
 
     errdefer std.debug.print("Usage {s}:\n\t{s} filepath <#means> <downsampling_factor>\nn", .{args[0], args[0]});
@@ -482,25 +494,15 @@ pub fn main() !void {
     for (means.items) |*m| {
         var buff: [256]u8 = .{0}**256;
         const col = m.*.color;
-        var writer = out_file.writer(&buff).interface;
-        try writer.print("{} {} {}\n", .{col[0], col[1], col[2]});
-        try writer.flush();
+        var writer = out_file.writer(&buff);
+        var writeri = &writer.interface;
+        try writeri.print("{} {} {}\n", .{col[0], col[1], col[2]});
+        try writeri.flush();
     }
     
     const clrs = means.items;
     const cclrs = complementary.items;
 
-    {
-        var buff: [256]u8 = .{0}**256;
-        var out_writer = out_ini_file.writer(&buff).interface;
-        try out_writer.print("[dyn_colors]\n", .{});
-        try out_writer.print("prim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
-        try out_writer.print("sec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
-        try out_writer.print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
-        try out_writer.print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
-        try out_writer.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
-        // try out_writer.flush();
-    }
 
     // try std.io.getStdOut().writer().print("prim: {s}\n", .{ try color_string_(&"██", clrs[0].color) });
     // try std.io.getStdOut().writer().print("sec: {s}\n", .{ try color_string_(&"██", clrs[1].color) });
@@ -541,15 +543,16 @@ pub fn main() !void {
     // }
     // std.debug.print("\n\n", .{});
 
-    {
-        var buff: [256]u8 = .{0}**256;
-        var out_writer = out_ini_file.writer(&buff).interface;
-        try out_writer.print("pprim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
-        try out_writer.print("psec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
-        try out_writer.print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
-        try out_writer.print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
-        // try out_writer.flush();
-    }
+    // {
+    //     // var out_writer = std.fs.File.stdout().writer(&buff).interface;
+    //     var o = out_ini_file.writer(&.{});
+    //     var out_out_1 = &o.interface;
+    //     try out_out_1.print("pprim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+    //     try out_out_1.print("psec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+    //     try out_out_1.print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
+    //     try out_out_1.print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+    //     // try out_writer.flush();
+    // }
 
     // try out_i3_file.writer().print("set $text_focus   #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
     // try out_i3_file.writer().print("set $bg_normal    #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
@@ -583,9 +586,9 @@ pub fn main() !void {
 
     // borda | fundo título | texto título | indicador | texto título (estado inverso)
     {
-        var buff: [256]u8 = .{0}**256;
-        var out_i3_writer = out_i3_file.writer(&buff).interface;
-        try out_i3_writer.print("\nclient.focused {s} {s} {s} {s} {s}\n", .{
+        var out_i3_writer = out_i3_file.writer(&.{});
+        var out_i3_writeri = &out_i3_writer.interface;
+        try out_i3_writeri.print("\nclient.focused {s} {s} {s} {s} {s}\n", .{
             cs.complementary, // title border
             cs.complementary, // title background
             "#000000",        // title text
@@ -594,15 +597,48 @@ pub fn main() !void {
         });
     }
 
+    // var out_ini_file = try std.fs.cwd().createFile("dyn_cpçprs.ini", .{});
+    // defer out_ini_file.close();
+    // // {
+    //     // var bu = [1]u8{0}**255;
+    //     // var ws = std.Io.fixedBufferStream(&bu);
+    //     // var out_writer = ws.writer();
+    //
+        var out_writer = out_ini_file.writer(&.{});
+        var out_writeri = &out_writer.interface;
+        try out_writeri.print("[dyn_colors]\n", .{});
+        try out_writeri.print("pprim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+        try out_writeri.print("psec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+        try out_writeri.print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
+        try out_writeri.print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
 
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        try out_writeri.print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
+        try out_writeri.print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
+        // try out_writeri.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+
+        // try out_out_1.print("pprim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+        // try out_out_1.print("psec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+        // try out_out_1.print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
+        // try out_out_1.print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+
+        // std.debug.print("{s}", .{ bu });
+        // std.debug.print("{s}", .{ bu });
+
+        // std.debug.print("[dyn_colors]\n", .{});
+        // std.debug.print("prim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+        // std.debug.print("sec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+        // std.debug.print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
+        // std.debug.print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
+        // std.debug.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+        // try out_writer.flush();
+    // }
+
+    var stdout_writer = std.fs.File.stdout().writer(&.{});
     const stdout = &stdout_writer.interface;
     try stdout.print("pprim: {s} {s}\n", .{ try color_string_(&"██", clrs[0].color), color_to_rgb_str(clrs[0].color) });
     try stdout.print("psec:  {s} {s}\n", .{ try color_string_(&"██", clrs[1].color), color_to_rgb_str(clrs[1].color) });
     try stdout.print("pterc: {s} {s}\n", .{ try color_string_(&"██", clrs[2].color), color_to_rgb_str(clrs[2].color) });
     try stdout.print("pcont: {s} {s}\n", .{ try color_string_(&"██", comp_m), color_to_rgb_str(comp_m) });
-    try stdout.flush();
 
 
     // for (means.items) |*m| {

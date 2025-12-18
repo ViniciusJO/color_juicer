@@ -66,6 +66,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "color_juicer",
         .root_module = kmeans,
+        .linkage = .static,
     });
 
     exe.linkLibC();
