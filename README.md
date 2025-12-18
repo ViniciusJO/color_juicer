@@ -6,6 +6,8 @@ Made using [stb_image](https://github.com/nothings/stb) utilities;
 
 It is extremly opinionated to get the most brigth colors to contrast with the black background of my polybar. The code also calculates the color that most contrast with the ones extracted, in order to use as accent in the system.
 
+\# The result is not deterministic !!! 
+
 Configured to generate the following files:
 
 - `$HOME/.cache/dyn_colors.ini`: to use in [polybar](https://github.com/polybar/polybar) (exposes colors pprim, psec, pterc, pcont);
