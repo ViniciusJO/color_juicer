@@ -53,13 +53,13 @@ pub const RGBA = struct {
         return .{
             .l = L,
             .c = @sqrt(A * A + B * B),
-            .h = std.math.atan2(B, A),
+            .h = std.math.atan2(B, A)/std.math.pi*180,
             .a = u8_to_f32(self.a),
         };
     }
 
     pub fn from_lch(lch: LCH) Self {
-        const h = lch.h;
+        const h = lch.h/180*std.math.pi;
         const A = lch.c * @cos(h);
         const B = lch.c * @sin(h);
 
