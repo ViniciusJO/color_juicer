@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Vec4 = @import("vec.zig").Vec4;
+
 test "COLORS" {
     var cor = RGBA.init(.{ .hex = 0x12345678 });
     std.debug.print("\n\nHEX: #{X}\nRGB: {}\nLCH: {}\nRGB: {}(converted back)\n\n", .{ cor.to_u32(), cor, cor.to_lch(), cor.to_lch().to_rgba() });
@@ -8,7 +10,7 @@ test "COLORS" {
     std.debug.print("\n\nHEX: #{X}\nRGB: {}\nLCH: {}\nRGB: {}(converted back)\n\n", .{ cor.to_u32(), cor, cor.to_lch(), cor.to_lch().to_rgba() });
 }
 
-pub const RGBA = struct {
+pub const RGBA = packed struct {
     r: u8,
     g: u8,
     b: u8,
@@ -26,10 +28,16 @@ pub const RGBA = struct {
                 .b = @intCast((c >>  8)&0xFF),
                 .a = @intCast((c >>  0)&0xFF),
             },
+            .vec => |c| Self{
+                .r = c[0],
+                .g = c[1],
+                .b = c[2],
+                .a = c[3],
+            },
         };
     }
 
-    pub fn to_lch(self: *Self) LCH {
+    pub fn to_lch(self: *const Self) LCH {
         const rf = u8_to_f32(self.r);
         const gf = u8_to_f32(self.g);
         const bf = u8_to_f32(self.b);
@@ -83,18 +91,30 @@ pub const RGBA = struct {
         };
     }
 
-    pub fn to_hex(self: *Self) []const u8 {
-        var str = [1]u8{0}**9;
-        _ = std.fmt.bufPrint(&str, "#{:0>2}{:0>2}{:0>2}{:0>2}", .{ self.r, self.g, self.b, self.a }) catch return "";
-        return &str;
-    }
-
     pub fn to_u32(self: *Self) u32 {
         return
             @as(u32, @intCast(self.r)) << 24 |
             @as(u32, @intCast(self.g)) << 16 |
             @as(u32, @intCast(self.b)) <<  8 |
             @as(u32, @intCast(self.a)) <<  0;
+    }
+
+    pub fn to_vec4(self: *Self) Vec4 {
+        return Vec4{ self.r, self.g, self.b, self.a };
+    }
+
+    pub fn complementary(self: *Self) Self {
+        var c = self.to_lch();
+        c.h = @mod(c.h + 180, 360);
+        return c.to_rgba();
+    }
+
+    pub fn colorizer(self: *const Self, alloc: std.mem.Allocator, str: *const []const u8) ![]u8 {
+        return std.fmt.allocPrint(
+            alloc,
+            "\x1B[38;2;{d};{d};{d}m{s}\x1B[0m",
+            .{ self.r, self.g, self.b, str.* },
+        );
     }
 };
 
@@ -111,6 +131,7 @@ pub const LCH = struct {
             .rgba => |c| c.to_lch(),
             .lch  => |c| c,
             .hex  => |c| RGBA.init(c).to_lch(),
+            .vec => |c| RGBA.init(c).to_lch(),
         };
     }
 
@@ -123,7 +144,7 @@ pub const LCH = struct {
     }
 };
 
-pub const AnyColor = union(enum){ rgba: RGBA, lch: LCH, hex: u32 };
+pub const AnyColor = union(enum){ rgba: RGBA, lch: LCH, hex: u32, vec: Vec4 };
 
 // ==================== UTILS ====================
 
