@@ -4,6 +4,13 @@ const Vec = @import("vec.zig");
 const Pallet = @import("pallet.zig").Pallet;
 const Parser = @import("parser.zig");
 
+const Image = struct {
+    width: c_int,
+    height: c_int,
+    channels: c_int,
+    pixels: []u8,
+};
+
 const stb_image = @import("stbi");
 // const stb_image_write = @import("stbiw");
 const stb_image_resize = @import("stbir");
@@ -14,19 +21,15 @@ pub fn kmeanspp_init(alloc: std.mem.Allocator, m: *[]Mean, pixels: *[]const Vec.
     const n = pixels.len;
     const k = m.len;
 
-    // Pick first centroid randomly
     const first_index = try randomIndex(n);
     const first_pixel = pixels.*[first_index];
 
     m.*[0].color = first_pixel;
 
-    // Allocate distances array
     var distances = try alloc.alloc(f64, n);
     defer alloc.free(distances);
 
-    // For each remaining centroid
     for (1..k) |i| {
-        // For each pixel, find distance squared to nearest existing centroid
         for (pixels.*, 0..) |p, j| {
             var min_dist: f64 = std.math.inf(f64);
             for (m.*[0..i]) |mean| {
@@ -37,11 +40,9 @@ pub fn kmeanspp_init(alloc: std.mem.Allocator, m: *[]Mean, pixels: *[]const Vec.
             distances[j] = min_dist;
         }
 
-        // Calculate total weighted distance
         var total: f64 = 0;
         for (distances) |d| total += d;
 
-        // Select next centroid with probability proportional to distance squared
         const r = try randomFloat() * total;
         var cumulative: f64 = 0;
         var next_index: usize = 0;
@@ -53,13 +54,12 @@ pub fn kmeanspp_init(alloc: std.mem.Allocator, m: *[]Mean, pixels: *[]const Vec.
             }
         }
 
-        // Set the new centroid
         m.*[i].color = pixels.*[next_index];
     }
 }
 
 fn repartition(alloc: std.mem.Allocator, ms: *[]Mean, pixels: *[]const Vec.Vec4) !*[]Mean {
-    for (ms.*) |*m| m.*.colors.clearRetainingCapacity(); //.clearRetainingCapacity();
+    for (ms.*) |*m| m.*.colors.clearRetainingCapacity();
     for (pixels.*) |c| {
         var min = &(ms.*[0]);
         for (ms.*) |*m| {
@@ -127,8 +127,8 @@ fn usage(name: []u8) void {
 
 const Args = struct {
     image_path: []const u8,
-    templates_path: []const u8,
-    output_reference_path: []const u8,
+    templates_path: ?[]const u8,
+    output_reference_path: ?[]const u8,
 };
 
 pub fn main() !void {
@@ -148,43 +148,37 @@ pub fn main() !void {
     const fac = 5;
     const precision = 0.01;
     
-
-    const Image = struct {
-        width: c_int,
-        height: c_int,
-        channels: c_int,
-        pixels: []u8,
-    };
-
     var input_image: Image = undefined;
 
-    input_image.pixels = (stb_image.stbi_load(
+    const input_c_ptr = stb_image.stbi_load(
         arguments.image_path.ptr,
         &input_image.width,
         &input_image.height,
         &input_image.channels,
         0
-    ))[0..@as(usize, @intCast(input_image.width*input_image.height*input_image.channels))];
-    // if(null == input_image.pixels) return error.ImageLoadError;
-
+    );
+    if(null == input_c_ptr) return error.ImageLoadError;
+    input_image.pixels = input_c_ptr[0..@as(usize, @intCast(input_image.width*input_image.height*input_image.channels))];
+    defer std.c.free(input_c_ptr);
     var downsampled = Image{
         .width = @divTrunc(input_image.width, fac),
         .height = @divTrunc(input_image.height, fac),
-        .channels = 4,
+        .channels = 3,
         .pixels = undefined,
     };
     
-    downsampled.pixels = (stb_image_resize.stbir_resize_uint8_linear(
+    const down_c_ptr = stb_image_resize.stbir_resize_uint8_linear(
         input_image.pixels.ptr,
         input_image.width, input_image.height, input_image.width*input_image.channels*@sizeOf(u8),
         null,
         downsampled.width, downsampled.height, downsampled.width*downsampled.channels*@sizeOf(u8),
         @intCast(downsampled.channels)
-    ))[0..@as(usize, @intCast(downsampled.width*downsampled.height*downsampled.channels))];
-    // if(null == downsampled) return error.ImageDownsamplingError;
+    );
+    if(null == down_c_ptr) return error.ImageDownsamplingError;
+    defer std.c.free(down_c_ptr.?);
+    downsampled.pixels = down_c_ptr[0..@as(usize, @intCast(downsampled.width*downsampled.height*downsampled.channels))];
 
-    // const down_size: usize = @intCast(new_w*new_h*new_c);
-    // var down_slice: []const u8 = downsampled[0..down_size];
+    std.debug.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\n Down: Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
 
     var means = try gpa.alloc(Mean, means_quant);
     defer gpa.free(means);
@@ -206,28 +200,28 @@ pub fn main() !void {
         if(m.*.partition_size == 0) m.*.color = means[0].color;
     }
 
-    // const color_dist_square = struct { fn color_dist(_clr: Color.RGBA) u64 {
-    //     const clr = [_]u64{ _clr.r, _clr.g, _clr.b, _clr.a };
-    //     return clr[0]*clr[0] + clr[1]*clr[1] + clr[2]*clr[2];
-    // }}.color_dist;
+    const color_dist_square = struct { fn color_dist(_clr: Color.RGBA) u64 {
+        const clr = [_]u64{ _clr.r, _clr.g, _clr.b, _clr.a };
+        return clr[0]*clr[0] + clr[1]*clr[1] + clr[2]*clr[2];
+    }}.color_dist;
 
-    // std.sort.heap(Mean, means, {}, struct {
-    //     pub fn cmp(_: void, a: Mean, b: Mean) bool {
-    //         const __a = Color.RGBA.init(.{ .vec = a.color });
-    //         const __b = Color.RGBA.init(.{ .vec = b.color });
-    //         const c1_ = color_dist_square(__a);
-    //         const c2_ = color_dist_square(__b);
-    //
-    //         const a_ = __a.to_lch();
-    //         const b_ = __b.to_lch();
-    //         const c1 = a_.c*a_.l*@as(f32, @floatFromInt(c1_));
-    //         const c2 = b_.c*b_.l*@as(f32, @floatFromInt(c2_));
-    //
-    //         return
-    //             a.partition_size > b.partition_size or
-    //             c1 > c2;
-    //     }
-    // }.cmp);
+    std.sort.heap(Mean, means, {}, struct {
+        pub fn cmp(_: void, a: Mean, b: Mean) bool {
+            const __a = Color.RGBA.init(.{ .vec = a.color });
+            const __b = Color.RGBA.init(.{ .vec = b.color });
+            const c1_ = color_dist_square(__a);
+            const c2_ = color_dist_square(__b);
+
+            const a_ = __a.to_lch();
+            const b_ = __b.to_lch();
+            const c1 = a_.c*a_.l*@as(f32, @floatFromInt(c1_));
+            const c2 = b_.c*b_.l*@as(f32, @floatFromInt(c2_));
+
+            return
+                a.partition_size > b.partition_size or
+                c1 > c2;
+        }
+    }.cmp);
     
     var primary = try gpa.alloc(Color.RGBA, means.len);
     defer gpa.free(primary);
