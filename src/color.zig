@@ -91,7 +91,7 @@ pub const RGBA = packed struct {
         };
     }
 
-    pub fn to_u32(self: *Self) u32 {
+    pub fn to_u32(self: *const Self) u32 {
         return
             @as(u32, @intCast(self.r)) << 24 |
             @as(u32, @intCast(self.g)) << 16 |
@@ -99,11 +99,25 @@ pub const RGBA = packed struct {
             @as(u32, @intCast(self.a)) <<  0;
     }
 
-    pub fn to_vec4(self: *Self) Vec4 {
+    pub fn to_vec4(self: *const Self) Vec4 {
         return Vec4{ self.r, self.g, self.b, self.a };
     }
 
-    pub fn complementary(self: *Self) Self {
+    pub fn to_rgb_str(self: *const Self) [7]u8 {
+        var ret: [7]u8 = undefined;
+        var stream = std.io.fixedBufferStream(&ret);
+        stream.writer().print("#{X:02}{X:02}{X:02}", .{ self.r, self.g, self.b }) catch { ret = .{ '#', '0', '0', '0', '0', '0', '0' }; };
+        return ret;
+    }
+
+    pub fn to_rgba_str(self: *const Self) [9]u8 {
+        var ret: [9]u8 = undefined;
+        var stream = std.io.fixedBufferStream(&ret);
+        stream.writer().print("#{X:02}{X:02}{X:02}{X:02}", .{ self.r, self.g, self.b, self.a }) catch { ret = .{ '#', '0', '0', '0', '0', '0', '0', '0', '0' }; };
+        return ret;
+    }
+
+    pub fn complementary(self: *const Self) Self {
         var c = self.to_lch();
         c.h = @mod(c.h + 180, 360);
         return c.to_rgba();

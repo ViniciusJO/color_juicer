@@ -1,3 +1,4 @@
 .zig-cache/
 zig-out/
 color_juicer
+*/**/.ignore/

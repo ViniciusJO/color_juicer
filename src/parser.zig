@@ -1,10 +1,6 @@
 const std = @import("std");
 const Color = @import("color.zig").Color;
-
-pub const Pallet = struct {
-    prim: *Color, sec: *Color,
-    terc: *Color, comp: *Color
-};
+const Pallet = @import("pallet.zig").Pallet;
 
 pub fn capture_to_text(capture: []const u8, pallet: Pallet) []const u8 {
 
@@ -14,12 +10,12 @@ pub fn capture_to_text(capture: []const u8, pallet: Pallet) []const u8 {
     // else if(std.mem.eql(u8, "comp", capture)) { return &pallet.comp.rgb_str(); }
     // else return "";
     
-    _ = pallet;
-
-    if(std.mem.eql(u8, "prim", capture))      { return "#A"; }
-    else if(std.mem.eql(u8, "sec", capture))  { return "#B"; }
-    else if(std.mem.eql(u8, "terc", capture)) { return "#C"; }
-    else if(std.mem.eql(u8, "comp", capture)) { return "#D"; }
+    if(std.mem.eql(u8, "prim", capture))       { return &pallet.prim.to_rgb_str();  }
+    else if(std.mem.eql(u8, "sec", capture))   { return &pallet.sec.to_rgb_str();   }
+    else if(std.mem.eql(u8, "terc", capture))  { return &pallet.terc.to_rgb_str();  }
+    else if(std.mem.eql(u8, "cprim", capture)) { return &pallet.cprim.to_rgb_str(); }
+    else if(std.mem.eql(u8, "csec", capture))  { return &pallet.csec.to_rgb_str();  }
+    else if(std.mem.eql(u8, "cterc", capture)) { return &pallet.cterc.to_rgb_str(); }
     else return "";
 }
 
