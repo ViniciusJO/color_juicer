@@ -1,22 +1,18 @@
 const std = @import("std");
 const Color = @import("color.zig").Color;
-const Pallet = @import("pallet.zig").Pallet;
+const Pallete = @import("pallete.zig");
 
-pub fn capture_to_text(capture: []const u8, pallet: Pallet) []const u8 {
+pub fn capture_to_text(capture: []const u8, pallet: Pallete) []const u8 {
+    if(capture.len < 2) return "";
+    const number = (std.fmt.parseInt(u8, capture[1..], 10) catch return "") - 1;
 
-    // if(std.mem.eql(u8, "prim", capture))      { return &pallet.prim.rgb_str(); }
-    // else if(std.mem.eql(u8, "sec", capture))  { return &pallet.sec.rgb_str(); }
-    // else if(std.mem.eql(u8, "terc", capture)) { return &pallet.terc.rgb_str(); }
-    // else if(std.mem.eql(u8, "comp", capture)) { return &pallet.comp.rgb_str(); }
-    // else return "";
-    
-    if(std.mem.eql(u8, "p1", capture))        { return &pallet.prim.to_rgb_str();  }
-    else if(std.mem.eql(u8, "p2", capture))   { return &pallet.sec.to_rgb_str();   }
-    else if(std.mem.eql(u8, "p3", capture))   { return &pallet.terc.to_rgb_str();  }
-    else if(std.mem.eql(u8, "c1", capture))   { return &pallet.cprim.to_rgb_str(); }
-    else if(std.mem.eql(u8, "c2", capture))   { return &pallet.csec.to_rgb_str();  }
-    else if(std.mem.eql(u8, "c3", capture))   { return &pallet.cterc.to_rgb_str(); }
-    else return "";
+    if(capture[0] == 'p') {
+        if(number >= pallet.primaries.len) return "";
+        return &pallet.primaries[number].to_rgb_str();
+    } else if(capture[0] == 'c') {
+        if(number >= pallet.complementaries.len) return "";
+        return &pallet.complementaries[number].to_rgb_str();
+    } else return "";
 }
 
 pub fn is_capturable(c: u8) bool {
@@ -28,7 +24,7 @@ pub fn is_capturable(c: u8) bool {
         (c == '-');
 }
 
-pub fn generate_from_template(allocator: std.mem.Allocator, io: std.Io, template: std.Io.File, output: std.Io.File, pallet: Pallet) !void {
+pub fn generate_from_template(allocator: std.mem.Allocator, io: std.Io, template: std.Io.File, output: std.Io.File, pallet: Pallete) !void {
     var buff: [4096]u8 = undefined;
     var tr = template.reader(io, &.{});
     var tri = &tr.interface;
@@ -90,7 +86,7 @@ pub fn iterate_dir_generating_template(
     ref: std.Io.Dir,
     dir: std.Io.Dir,
     level: u8,
-    pallet: Pallet,
+    pallet: Pallete,
 ) !void {
     var iterable_dir = try dir.walk(allocator);
     while (try iterable_dir.next(io)) |entry| {
@@ -136,7 +132,7 @@ pub fn iterate_dir_generating_template(
     }
 }
 
-pub fn generate_files(io: std.Io, pallet: Pallet) !void {
+pub fn generate_files(io: std.Io, pallet: Pallete) !void {
     const gpa = std.heap.page_allocator;
 
     var b: [4096]u8 = undefined;

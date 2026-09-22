@@ -7,8 +7,7 @@ const stb_image_resize = @import("stbir");
 
 const Color = @import("color.zig");
 const Vec = @import("vec.zig");
-const Pallet = @import("pallet.zig").Pallet;
-const Pallet_ = @import("pallet.zig").Pallet_;
+const Pallete = @import("pallete.zig");
 const Parser = @import("parser.zig");
 
 const write_downsampled_image = false;
@@ -264,7 +263,7 @@ pub fn main(init: std.process.Init) !void {
     // const precision = 100;
     // const precision = 1000;
     // #112313
-    
+
     var input_image: Image = undefined;
 
     const input_c_ptr = stb_image.stbi_load(
@@ -283,7 +282,7 @@ pub fn main(init: std.process.Init) !void {
         .channels = 3,
         .pixels = undefined,
     };
-    
+
     const down_c_ptr = stb_image_resize.stbir_resize_uint8_linear(
         input_image.pixels.ptr,
         input_image.width, input_image.height, input_image.width*input_image.channels*@sizeOf(u8),
@@ -359,7 +358,7 @@ pub fn main(init: std.process.Init) !void {
                 c1 > c2;
         }
     }.cmp);
-    
+
     var primary = try alloc.alloc(Color.RGBA, means.len);
     defer alloc.free(primary);
     var complementary = try alloc.alloc(Color.RGBA, means.len);
@@ -379,25 +378,14 @@ pub fn main(init: std.process.Init) !void {
     //     }
     // }
 
-    const pallet = Pallet{
-        .prim  = &primary[0],
-        .sec   = &primary[1],
-        .terc  = &primary[2],
-        .cprim = &complementary[0],
-        .csec  = &complementary[1],
-        .cterc = &complementary[2],
-    };
-
-    const pallet_ = Pallet_{
+    const pallete = Pallete{
         .primaries = &[_]*Color.RGBA{ &primary[0], &primary[1], &primary[2], },
         .complementaries = &[_]*Color.RGBA{ &complementary[0],  &complementary[1], &complementary[2], },
     };
 
-    try stdout.print("\nPallet:\n\n", .{});
-    try pallet.print(alloc, io);
-
-    try stdout.print("\nPallet_:\n\n", .{});
-    try pallet_.print(alloc, io);
+    try stdout.print("\nPallete:\n\n", .{});
+    try pallete.print(alloc, io);
+    try stdout.print("\n", .{});
 
 
     // TODO: get input directory from args
@@ -410,7 +398,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(1);
     };
     // TODO: verify if the realpath points to actual dirs
-    try stdout.print("\nIN__REALPAT: {s}\n", .{realpath_in_buf[0..inx]});
+    try stdout.print("IN__REALPATH: {s}\n", .{realpath_in_buf[0..inx]});
     var in  = try std.Io.Dir.openDirAbsolute(io, realpath_in_buf[0..inx], .{ .iterate = true, .access_sub_paths = true });
     defer in.close(io);
 
@@ -420,15 +408,15 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(1);
     };
     // TODO: verify if the realpath points to actual dirs
-    try stdout.print("OUT_REALPAT: {s}\n\n", .{realpath_out_buf[0..outx]});
+    try stdout.print("OUT_REALPATH: {s}\n\n", .{realpath_out_buf[0..outx]});
     var out = try std.Io.Dir.openDirAbsolute(io, realpath_out_buf[0..outx], .{ .iterate = true, .access_sub_paths = true });
     defer out.close(io);
 
 
     try stdout.print("Generating: files from templates...\n\n", .{});
-    try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallet);
+    try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallete);
 
-
+}
 
 
 
@@ -615,4 +603,3 @@ pub fn main(init: std.process.Init) !void {
         // std.debug.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
         // try out_writer.flush();
     // }
-}
