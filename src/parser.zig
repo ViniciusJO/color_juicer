@@ -10,12 +10,12 @@ pub fn capture_to_text(capture: []const u8, pallet: Pallet) []const u8 {
     // else if(std.mem.eql(u8, "comp", capture)) { return &pallet.comp.rgb_str(); }
     // else return "";
     
-    if(std.mem.eql(u8, "prim", capture))       { return &pallet.prim.to_rgb_str();  }
-    else if(std.mem.eql(u8, "sec", capture))   { return &pallet.sec.to_rgb_str();   }
-    else if(std.mem.eql(u8, "terc", capture))  { return &pallet.terc.to_rgb_str();  }
-    else if(std.mem.eql(u8, "cprim", capture)) { return &pallet.cprim.to_rgb_str(); }
-    else if(std.mem.eql(u8, "csec", capture))  { return &pallet.csec.to_rgb_str();  }
-    else if(std.mem.eql(u8, "cterc", capture)) { return &pallet.cterc.to_rgb_str(); }
+    if(std.mem.eql(u8, "p1", capture))        { return &pallet.prim.to_rgb_str();  }
+    else if(std.mem.eql(u8, "p2", capture))   { return &pallet.sec.to_rgb_str();   }
+    else if(std.mem.eql(u8, "p3", capture))   { return &pallet.terc.to_rgb_str();  }
+    else if(std.mem.eql(u8, "c1", capture))   { return &pallet.cprim.to_rgb_str(); }
+    else if(std.mem.eql(u8, "c2", capture))   { return &pallet.csec.to_rgb_str();  }
+    else if(std.mem.eql(u8, "c3", capture))   { return &pallet.cterc.to_rgb_str(); }
     else return "";
 }
 
@@ -28,9 +28,14 @@ pub fn is_capturable(c: u8) bool {
         (c == '-');
 }
 
-pub fn generate_from_template(allocator: std.mem.Allocator, template: std.fs.File, output: std.fs.File, pallet: Pallet) !void {
+pub fn generate_from_template(allocator: std.mem.Allocator, io: std.Io, template: std.Io.File, output: std.Io.File, pallet: Pallet) !void {
     var buff: [4096]u8 = undefined;
-    const bytes_read = try template.readAll(&buff);
+    var tr = template.reader(io, &.{});
+    var tri = &tr.interface;
+
+    // try tri.readVecAll(&buff);
+    const bytes_read = try tri.readSliceShort(&buff);
+    // const bytes_read = try template.readAll(&buff);
     const content = buff[0..bytes_read];
 
     var capture: []const u8 = "";
@@ -54,7 +59,7 @@ pub fn generate_from_template(allocator: std.mem.Allocator, template: std.fs.Fil
         } else out = try std.fmt.allocPrint(allocator, "{s}{c}", .{ out, c });
     }
 
-    var out_reader = output.writer(&.{});
+    var out_reader = output.writer(io, &.{});
     try out_reader.interface.print("{s}", .{ out });
 }
 
@@ -81,13 +86,14 @@ pub fn padding(allocator: std.mem.Allocator, level: u8) []const u8 {
 
 pub fn iterate_dir_generating_template(
     allocator: std.mem.Allocator,
-    ref: std.fs.Dir,
-    dir: std.fs.Dir,
+    io: std.Io,
+    ref: std.Io.Dir,
+    dir: std.Io.Dir,
     level: u8,
     pallet: Pallet,
 ) !void {
     var iterable_dir = try dir.walk(allocator);
-    while (try iterable_dir.next()) |entry| {
+    while (try iterable_dir.next(io)) |entry| {
         if(have_sub_path(entry.path)) {
             // std.debug.print("<<skip-{s}>>\n", .{entry.path});
             continue;
@@ -105,51 +111,52 @@ pub fn iterate_dir_generating_template(
         switch(entry.kind) {
             .file => {
                 // std.debug.print("file: {s}\n", .{entry.name});
-                const template_file = try dir.openFile(entry.path, .{ .mode = .read_only });
-                defer template_file.close();
-                const out_file = ref.openFile(entry.path, .{ .mode = .write_only })
-                    catch try ref.createFile(entry.path, .{});
-                defer out_file.close();
-                try generate_from_template(allocator, template_file, out_file, pallet);
+                const template_file = try dir.openFile(io, entry.path, .{ .mode = .read_only });
+                defer template_file.close(io);
+                const out_file = ref.openFile(io, entry.path, .{ .mode = .write_only })
+                    catch try ref.createFile(io, entry.path, .{});
+                defer out_file.close(io);
+                try generate_from_template(allocator, io, template_file, out_file, pallet);
             },
             .directory => {
                 // std.debug.print("===== DIR =====\n", .{});
-                var template_dir = try dir.openDir(entry.path, .{ .iterate = true });
-                defer template_dir.close();
-                var out_dir = ref.openDir(entry.path, .{ .iterate = true })
+                var template_dir = try dir.openDir(io, entry.path, .{ .iterate = true });
+                defer template_dir.close(io);
+                var out_dir = ref.openDir(io, entry.path, .{ .iterate = true })
                     catch catcher: {
-                        try ref.makeDir(entry.path);
-                        break :catcher try ref.openDir(entry.path, .{ .iterate = true });
+                        try ref.createDir(io, entry.path, .default_dir);
+                        // try ref.makeDir(entry.path);
+                        break :catcher try ref.openDir(io, entry.path, .{ .iterate = true });
                     };
-                defer out_dir.close();
-                try iterate_dir_generating_template(allocator, out_dir, template_dir, level + 1, pallet);
+                defer out_dir.close(io);
+                try iterate_dir_generating_template(allocator, io, out_dir, template_dir, level + 1, pallet);
             },
             else => {}
         }
     }
 }
 
-pub fn generate_files(pallet: Pallet) !void {
+pub fn generate_files(io: std.Io, pallet: Pallet) !void {
     const gpa = std.heap.page_allocator;
 
     var b: [4096]u8 = undefined;
 
-    const home_path = try std.fs.realpath(try std.process.getEnvVarOwned(gpa, "HOME"), &b);
-    var home = try std.fs.openDirAbsolute(home_path, .{ .iterate = true });
-    defer home.close();
+    const home_path = try std.Io.Dir.realPath(io, try std.process.getEnvVarOwned(gpa, "HOME"), &b);
+    var home = try std.Io.Dir.openDirAbsolute(io, home_path, .{ .iterate = true });
+    defer home.close(io);
 
     const config_path = try std.fs.path.join(gpa, &[_][]const u8{ home_path, ".config/color_juicer"  });
-    std.fs.makeDirAbsolute(config_path) catch |e| {
+    std.Io.Dir.createDirAbsolute(io, config_path, .default_dir) catch |e| {
         if(e != error.PathAlreadyExists) return e;
     };
 
     const template_path = try std.fs.path.join(gpa, &[_][]const u8{ config_path, "template"  });
-    std.fs.makeDirAbsolute(template_path) catch |e| {
+    std.Io.Dir.createDirAbsolute(io, template_path, .default_dir) catch |e| {
         if(e != error.PathAlreadyExists) return e;
     };
-    var template = try std.fs.openDirAbsolute(template_path, .{ .iterate = true });
-    defer template.close();
+    var template = try std.Io.Dir.openDirAbsolute(io, template_path, .{ .iterate = true });
+    defer template.close(io);
 
-    try iterate_dir_generating_template(gpa, home, template, 0, pallet);
+    try iterate_dir_generating_template(gpa, io, home, template, 0, pallet);
 }
 

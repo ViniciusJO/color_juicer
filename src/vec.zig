@@ -34,3 +34,7 @@ pub fn vec4_dist(v1: Vec4, v2: Vec4) f64 {
     return @sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
 }
 
+pub fn bytes_as_vec3(bytes: []const u8) []const Vec3 {
+    return @as([*]const Vec3, @ptrCast(bytes.ptr))[0..@divExact(bytes.len, 3)];
+}
+

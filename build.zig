@@ -1,15 +1,11 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    b.verbose = true;
+    // b.debug_incremental = true;
+
     const target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux, .cpu_model = .baseline });
-
     const optimize = b.standardOptimizeOption(.{});
-
-    const kmeans = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
 
     const wf = b.addWriteFiles();
     const stb_imp = wf.add("stb_implementations.c",
@@ -23,31 +19,40 @@ pub fn build(b: *std.Build) void {
 
     const stb_image = b.addTranslateC(.{
         .target = target,
-        .root_source_file = b.path("src/stb/stb_image.h"),
         .optimize = optimize,
-        .link_libc = true,
+        .root_source_file = b.path("src/stb/stb_image.h"),
     });
 
     const stb_image_write = b.addTranslateC(.{
         .target = target,
-        .root_source_file = b.path("src/stb/stb_image_write.h"),
         .optimize = optimize,
-        .link_libc = true,
+        .root_source_file = b.path("src/stb/stb_image_write.h"),
     });
 
     const stb_image_resize = b.addTranslateC(.{
         .target = target,
-        .root_source_file = b.path("src/stb/stb_image_resize2.h"),
         .optimize = optimize,
-        .link_libc = true,
+        .root_source_file = b.path("src/stb/stb_image_resize2.h"),
     });
 
-    kmeans.addImport("stbi", stb_image.createModule());
-    kmeans.addImport("stbiw", stb_image_write.createModule());
-    kmeans.addImport("stbir", stb_image_resize.createModule());
+    const args_dep = b.dependency("args", .{ .target = target, .optimize = optimize }); //.module("args")
+                                                                                        //
+    const kmeans = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("src/main.zig"),
+        .imports = &.{
+            .{ .name = "args_parser", .module = args_dep.module("args") },
+            .{ .name = "stbi",  .module = stb_image.createModule() },
+            .{ .name = "stbiw", .module = stb_image_write.createModule() },
+            .{ .name = "stbir", .module = stb_image_resize.createModule() },
+        },
+    });
+
+
+    kmeans.addCSourceFile(.{ .file = stb_imp, .flags = &[_][]const u8{ "-fno-sanitize=undefined" } });
 
     // kmeans.addIncludeDir("src/stb");
-    kmeans.addCSourceFile(.{ .file = stb_imp, .flags = &[_][]const u8{ "-fno-sanitize=undefined" } });
 
     // kmeans.addCSourceFiles(.{
     //     .files = &[_][]const u8 {
@@ -70,8 +75,6 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
     });
 
-    exe.linkLibC();
-
     exe.step.dependOn(&wf.step);
     exe.step.dependOn(&stb_image.step);
     exe.step.dependOn(&stb_image_write.step);
@@ -82,9 +85,7 @@ pub fn build(b: *std.Build) void {
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    if (b.args) |args| { run_cmd.addArgs(args); }
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);

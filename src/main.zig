@@ -1,8 +1,17 @@
 const std = @import("std");
+const args_parser = @import("args_parser");
+
+const stb_image = @import("stbi");
+const stb_image_write = @import("stbiw");
+const stb_image_resize = @import("stbir");
+
 const Color = @import("color.zig");
 const Vec = @import("vec.zig");
 const Pallet = @import("pallet.zig").Pallet;
+const Pallet_ = @import("pallet.zig").Pallet_;
 const Parser = @import("parser.zig");
+
+const write_downsampled_image = false;
 
 const Image = struct {
     width: c_int,
@@ -11,31 +20,57 @@ const Image = struct {
     pixels: []u8,
 };
 
-const stb_image = @import("stbi");
-// const stb_image_write = @import("stbiw");
-const stb_image_resize = @import("stbir");
+const Mean = struct {
+    const Self = @This();
 
-const Mean = struct { color: Vec.Vec4, colors: std.ArrayList(Vec.Vec4), dist: f64, partition_size: u64 = 0 };
+    color: Vec.Vec4,
+    colors: std.ArrayList(Vec.Vec4),
+    dist: f64,
+    partition_size: u64 = 0,
 
-pub fn kmeanspp_init(alloc: std.mem.Allocator, m: *[]Mean, pixels: *[]const Vec.Vec4) !void {
+    pub fn print_color(self: *const Self, alloc: std.mem.Allocator, io: std.Io) !void {
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+        const color = Color.RGBA.init(.{ .vec = self.color });
+        const arena_alloc = arena.allocator();
+        _ = &arena_alloc;
+        var stdout_writer = std.Io.File.stdout().writer(io, &.{});
+        const stdout = &stdout_writer.interface;
+        try stdout.print("{s} {s}\n", .{ try color.colorizer(arena_alloc, &"██"), color.to_rgb_str() });
+        try stdout.flush();
+    }
+};
+
+pub fn kmeanspp_init(alloc: std.mem.Allocator, io: std.Io, m: *[]Mean, pixels: *[]const Vec.Vec3) !void {
     const n = pixels.len;
     const k = m.len;
 
-    const first_index = try randomIndex(n);
+    const first_index = try randomIndex(io, n);
     const first_pixel = pixels.*[first_index];
 
-    m.*[0].color = first_pixel;
+    m.*[0].color = .{ first_pixel[0], first_pixel[1], first_pixel[2], 255 };
+
+    var ar = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer ar.deinit();
+    std.debug.print("random_i: {} {any} {any} {s}\n", .{
+        first_index,
+        first_pixel,
+        m.*[0].color,
+        Color.RGBA.init(.{ .vec = m.*[0].color }).to_rgb_str()
+    });
 
     var distances = try alloc.alloc(f64, n);
     defer alloc.free(distances);
 
     for (1..k) |i| {
-        for (pixels.*, 0..) |p, j| {
+        for (0..pixels.len) |j| {
+            // std.debug.print("pixel: {}\n", .{j});
+            // 221178
+            const p = pixels.*[j];
             var min_dist: f64 = std.math.inf(f64);
             for (m.*[0..i]) |mean| {
-                const dist_sq = vec_dist_sq(mean.color, p);
-                if (dist_sq < min_dist)
-                    min_dist = dist_sq;
+                const dist_sq = vec_dist_sq(mean.color, .{ p[0], p[1], p[2], 255 });
+                if (dist_sq < min_dist) min_dist = dist_sq;
             }
             distances[j] = min_dist;
         }
@@ -43,7 +78,7 @@ pub fn kmeanspp_init(alloc: std.mem.Allocator, m: *[]Mean, pixels: *[]const Vec.
         var total: f64 = 0;
         for (distances) |d| total += d;
 
-        const r = try randomFloat() * total;
+        const r = try randomFloat(io) * total;
         var cumulative: f64 = 0;
         var next_index: usize = 0;
         for (distances, 0..) |d, j| {
@@ -53,14 +88,17 @@ pub fn kmeanspp_init(alloc: std.mem.Allocator, m: *[]Mean, pixels: *[]const Vec.
                 break;
             }
         }
-
-        m.*[i].color = pixels.*[next_index];
+        const np = pixels.*[next_index];
+        m.*[i].color = .{ np[0], np[1], np[2], 255 };
     }
 }
 
-fn repartition(alloc: std.mem.Allocator, ms: *[]Mean, pixels: *[]const Vec.Vec4) !*[]Mean {
+fn repartition(alloc: std.mem.Allocator, ms: *[]Mean, pixels: *[]const Vec.Vec3) !*[]Mean {
     for (ms.*) |*m| m.*.colors.clearRetainingCapacity();
-    for (pixels.*) |c| {
+    for (pixels.*) |p| {
+        // pixels are Vec3 (matches the image's 3 channels), Mean.color is
+        // Vec4 -- pad with a fixed alpha, same convention as kmeanspp_init.
+        const c: Vec.Vec4 = .{ p[0], p[1], p[2], 255 };
         var min = &(ms.*[0]);
         for (ms.*) |*m| {
             if (Vec.vec4_dist(c, m.color) < Vec.vec4_dist(c, min.color)) min = m;
@@ -107,46 +145,125 @@ fn vec_dist_sq(a: Vec.Vec4, b: Vec.Vec4) f64 {
         square(@as(f64, @floatFromInt(a[3])) - @as(f64, @floatFromInt(b[3])));
 }
 
-fn randomIndex(n: usize) !usize {
+fn randomIndex(io: std.Io, n: usize) !usize {
     var buf: u64 = undefined;
-    std.crypto.random.bytes(std.mem.asBytes(&buf));
+    // std.crypto.random.bytes(std.mem.asBytes(&buf));
+    std.Io.random(io, std.mem.asBytes(&buf));
     return @intCast(buf % @as(u64, n));
 }
 
-fn randomFloat() !f64 {
+fn randomFloat(io: std.Io) !f64 {
     var buf: u64 = undefined;
-    std.crypto.random.bytes(std.mem.asBytes(&buf));
+    // std.crypto.random.bytes(std.mem.asBytes(&buf));
+    std.Io.random(io, std.mem.asBytes(&buf));
     // Divide by max u64 to get float in [0,1)
     return @as(f64, @floatFromInt(buf)) / @as(f64, @floatFromInt(std.math.maxInt(u64)));
 }
 
-fn usage(name: []u8) void {
+fn usage(name: []const u8) void {
     // std.debug.print("Usage {s}:\n\t{s} filepath <#means> <downsampling_factor>\n", .{name, name});
     std.debug.print("Usage:\t{s} filepath\n", .{name});
 }
 
 const Args = struct {
     image_path: []const u8,
+    contrast: ?[]const u8,
     templates_path: ?[]const u8,
     output_reference_path: ?[]const u8,
 };
 
-pub fn main() !void {
-    const gpa = std.heap.page_allocator;
+const StdIO = struct {
+    in: *std.Io.Reader,
+    out: *std.Io.Writer,
+    err: *std.Io.Writer,
+};
 
-    const args = try std.process.argsAlloc(gpa);
-    defer std.process.argsFree(gpa, args);
-    errdefer usage(args[0]);
+const Kit = struct {
+    const Self = @This();
+
+    io: std.Io,
+    args: Args,
+    stdio: StdIO,
+    gpa: std.mem.Allocator,
+    arena: std.heap.ArenaAllocator,
+
+    pub fn init(io: std.Io, arguments: Args) Self {
+        var stdin_reader = std.Io.File.stdin().reader(io, &.{});
+        var stdout_writer = std.Io.File.stdout().writer(io, &.{});
+        var stderr_writer = std.Io.File.stderr().writer(io, &.{});
+
+        const stdin = &stdin_reader.interface;
+        const stdout = &stdout_writer.interface;
+        const stderr = &stderr_writer.interface;
+
+        return .{
+            .io = io,
+            .args = arguments,
+            .gpa = std.heap.page_allocator,
+            .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+            .stdio = StdIO { .in = stdin, .out = stdout, .err = stderr, }
+        };
+    }
+};
+
+pub fn main(init: std.process.Init) !void {
+
+    const alloc = init.gpa;
+    const io = init.io;
+
+    // var stdin_reader = std.Io.File.stdin().reader(io, &.{});
+    // const stdin = &stdin_reader.interface;
+
+    var stdout_writer = std.Io.File.stdout().writer(io, &.{});
+    const stdout = &stdout_writer.interface;
+
+    var stderr_writer = std.Io.File.stderr().writer(io, &.{});
+    const stderr = &stderr_writer.interface;
+
+    const args = try init.minimal.args.toSlice(alloc);
+    defer alloc.free(args);
+    errdefer usage(args[0][0..args[0].len]);
 
     var _a: Args = undefined;
-    _a.image_path = if(args.len >= 1) args[1] else return error.NoFilepath;
+    _a.image_path = if(args.len >= 1) args[1] else {
+        try stderr.print("ERROR: missing required file path\n", .{});
+        try stderr.flush();
+        return;
+    };
+
     // const means_quant = if(args.len >= 2) std.fmt.parseInt(usize, args[2], 10) catch return error.InvalidArgument else 10;
     // const fac = if(args.len >= 3) std.fmt.parseInt(u8, args[3], 10) catch return error.InvalidArgument else 4;
+
     const arguments = _a;
 
-    const means_quant = 3;
+    // const kit = Kit{
+    //     .io = io,
+    //     .args = arguments,
+    //     .gpa = alloc,
+    //     .arena = std.heap.ArenaAllocator.init(alloc),
+    //     .stdio = StdIO { .in = stdin, .out = stdout, .err = stderr, }
+    // };
+
+    // const kit = Kit.init(io,arguments);
+    // _ = kit;
+
+
+    // const input = try kit.stdio.in.takeDelimiterExclusive('\n');//readSliceShort(&bff);
+    //
+    // try kit.stdio.out.print("\nTEST: {s}\n", .{ input });
+
+    // if(true) return;
+
+
+
+
+    const means_quant = 6;
     const fac = 5;
     const precision = 0.01;
+    // const precision = 1;
+    // const precision = 100;
+    // const precision = 1000;
+    // #112313
     
     var input_image: Image = undefined;
 
@@ -179,26 +296,46 @@ pub fn main() !void {
     downsampled.pixels = down_c_ptr[0..@as(usize, @intCast(downsampled.width*downsampled.height*downsampled.channels))];
 
     std.debug.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\n Down: Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
+    std.debug.print("down_length: {} bytes\n", .{ downsampled.pixels.len });
 
-    var means = try gpa.alloc(Mean, means_quant);
-    defer gpa.free(means);
+    if(write_downsampled_image) _ = stb_image_write.stbi_write_png(
+        "dout.png",
+        downsampled.width,
+        downsampled.height,
+        downsampled.channels,
+        downsampled.pixels.ptr,
+        downsampled.width*downsampled.channels*@sizeOf(u8)
+    );
+
+    var means = try alloc.alloc(Mean, means_quant);
+    defer alloc.free(means);
 
     for(means) |*m| {
         m.color = Color.RGBA.init(.{ .hex = 0x000000FF }).to_vec4();
-        m.colors = try std.ArrayList(Vec.Vec4).initCapacity(gpa, 0);
+        m.colors = try std.ArrayList(Vec.Vec4).initCapacity(alloc, 0);
         m.dist = std.math.inf(f64);
         m.partition_size = 0;
     }
-    try kmeanspp_init(gpa, &means, @ptrCast(&downsampled.pixels));
+
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    defer arena.deinit();
+
+    var pixel_view: []const Vec.Vec3 = Vec.bytes_as_vec3(downsampled.pixels);
+
+    try kmeanspp_init(arena.allocator(), io, &means, &pixel_view);
 
     while (true) {
-        _ = try repartition(gpa, &means, @ptrCast(&downsampled.pixels));
+        _ = try repartition(arena.allocator(), &means, &pixel_view);
         if (compute_means(&means, precision)) break;
     }
 
     for (means) |*m| {
         if(m.*.partition_size == 0) m.*.color = means[0].color;
     }
+
+    // std.debug.print("\nMEANS:\n", .{});
+    for (means) |m| try m.print_color(alloc, io);
+    // std.debug.print("\n\n", .{});
 
     const color_dist_square = struct { fn color_dist(_clr: Color.RGBA) u64 {
         const clr = [_]u64{ _clr.r, _clr.g, _clr.b, _clr.a };
@@ -214,8 +351,8 @@ pub fn main() !void {
 
             const a_ = __a.to_lch();
             const b_ = __b.to_lch();
-            const c1 = a_.c*a_.l*@as(f32, @floatFromInt(c1_));
-            const c2 = b_.c*b_.l*@as(f32, @floatFromInt(c2_));
+            const c1 = a_.c/a_.l*@as(f32, @floatFromInt(c1_));
+            const c2 = b_.c/b_.l*@as(f32, @floatFromInt(c2_));
 
             return
                 a.partition_size > b.partition_size or
@@ -223,10 +360,10 @@ pub fn main() !void {
         }
     }.cmp);
     
-    var primary = try gpa.alloc(Color.RGBA, means.len);
-    defer gpa.free(primary);
-    var complementary = try gpa.alloc(Color.RGBA, means.len);
-    defer gpa.free(complementary);
+    var primary = try alloc.alloc(Color.RGBA, means.len);
+    defer alloc.free(primary);
+    var complementary = try alloc.alloc(Color.RGBA, means.len);
+    defer alloc.free(complementary);
 
     for (means, 0..) |*m, i| {
         primary[i] = Color.RGBA.init(.{ .vec = m.color });
@@ -250,11 +387,51 @@ pub fn main() !void {
         .csec  = &complementary[1],
         .cterc = &complementary[2],
     };
-    
-    try pallet.print(gpa);
+
+    const pallet_ = Pallet_{
+        .primaries = &[_]*Color.RGBA{ &primary[0], &primary[1], &primary[2], },
+        .complementaries = &[_]*Color.RGBA{ &complementary[0],  &complementary[1], &complementary[2], },
+    };
+
+    try stdout.print("\nPallet:\n\n", .{});
+    try pallet.print(alloc, io);
+
+    try stdout.print("\nPallet_:\n\n", .{});
+    try pallet_.print(alloc, io);
 
 
     // TODO: get input directory from args
+    const in_path  = "src/.ignore/template";
+    const out_path = "src/.ignore/out";
+
+    var realpath_in_buf: [4096]u8 = undefined;
+    const inx = std.Io.Dir.realPathFile(std.Io.Dir.cwd(), init.io, in_path, &realpath_in_buf) catch |err| {
+        std.log.err("Failed to open path \"{s}\": {}", .{ in_path, err });
+        std.process.exit(1);
+    };
+    // TODO: verify if the realpath points to actual dirs
+    try stdout.print("\nIN__REALPAT: {s}\n", .{realpath_in_buf[0..inx]});
+    var in  = try std.Io.Dir.openDirAbsolute(io, realpath_in_buf[0..inx], .{ .iterate = true, .access_sub_paths = true });
+    defer in.close(io);
+
+    var realpath_out_buf: [4096]u8 = undefined;
+    const outx = std.Io.Dir.realPathFile(std.Io.Dir.cwd(), init.io, out_path, &realpath_out_buf) catch |err| {
+        std.log.err("Failed to open path \"{s}\": {}", .{ out_path, err });
+        std.process.exit(1);
+    };
+    // TODO: verify if the realpath points to actual dirs
+    try stdout.print("OUT_REALPAT: {s}\n\n", .{realpath_out_buf[0..outx]});
+    var out = try std.Io.Dir.openDirAbsolute(io, realpath_out_buf[0..outx], .{ .iterate = true, .access_sub_paths = true });
+    defer out.close(io);
+
+
+    try stdout.print("Generating: files from templates...\n\n", .{});
+    try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallet);
+
+
+
+
+
 
     // var b: [4096]u8 = undefined;
     //
@@ -273,14 +450,6 @@ pub fn main() !void {
     // };
     // var template = try std.fs.openDirAbsolute(template_path, .{ .iterate = true });
     // defer template.close();
-
-    var cwd = std.fs.cwd();
-    var in = try cwd.openDir("src/.ignore/template", .{});
-    defer in.close();
-    var out = try cwd.openDir("src/.ignore/out", .{});
-    defer out.close();
-
-    // try Parser.iterate_dir_generating_template(gpa, out, in, 0, pallet);
 
 
 

@@ -1,0 +1,12 @@
+.{
+    .name = .color_juicer,
+    .version = "0.16.0",
+    .dependencies = .{
+        .args = .{
+            .url = "git+https://github.com/ikskuh/zig-args?ref=master#fae95c8350c8791752392cc24efa17b5b8b9275b",
+            .hash = "args-0.0.0-CiLiqrjgAAAJ1dlySoNHUhYpX1btAdDU2Rr4Ls61VTbO",
+        },
+    },
+    .paths = .{""},
+    .fingerprint = 0xa6bfbed0d4846864,
+}

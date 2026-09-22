@@ -105,8 +105,8 @@ pub const RGBA = packed struct {
 
     pub fn to_rgb_str(self: *const Self) [7]u8 {
         var ret: [7]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&ret);
-        stream.writer().print("#{X:02}{X:02}{X:02}", .{ self.r, self.g, self.b }) catch { ret = .{ '#', '0', '0', '0', '0', '0', '0' }; };
+        var stream = std.Io.Writer.fixed(&ret);
+        stream.print("#{X:02}{X:02}{X:02}", .{ self.r, self.g, self.b }) catch { ret = .{ '#', '0', '0', '0', '0', '0', '0' }; };
         return ret;
     }
 
