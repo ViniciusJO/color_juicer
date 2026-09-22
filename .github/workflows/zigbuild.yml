@@ -7,29 +7,7 @@ on:
     branches: [ "release" ]
 
 jobs:
-  # build_v0_14_1:
-
-    # runs-on: ubuntu-latest
-
-    # steps:
-    # - uses: actions/checkout@v4
-    # - uses: jetsung/install-zig@v0.0.3
-      # with:
-        # version: "0.14.1"
-
-    # - name: configure
-    #   run: ./configure
-
-    # - name: Build
-      # run: make
-
-    # - name: Run check
-    #   run: make check
-
-    # - name: Run distcheck
-    #   run: make distcheck
-
-  build_v0_15_1:
+  build_v0_16_1:
 
     runs-on: ubuntu-latest
 
@@ -37,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jetsung/install-zig@v0.0.3
         with:
-          version: "0.15.1"
+          version: "0.16.0"
 
       - name: Build
         run: zig build -Doptimize=ReleaseFast
