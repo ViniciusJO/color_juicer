@@ -37,13 +37,14 @@ color_juicer <image-path> [options]
 
 ```
 Options:
-  -#, --colors_count <n>         number of colors to output (defaults to 6)
-  -c, --contrast <hex>           color on which to calculate contrast (defaults to #000000)
-  -t, --templates_path <path>    path for the template folder
-  -o, --output_reference_path <path>
-                                 reference base path to resolve templates (defaults to $HOME)
-  -n, --no_cache_output          prevent generation of the default $HOME/.cache/juiced.color file
-  -h, --help                     displays help message
+  -#, --colors_count            number of colors to output (defaults to 6)
+  -c, --contrast                color on wich to calculate contrast (defaults to #000000)
+  -t, --templates_path          path for the template folder
+  -o, --output_reference_path   reference base path to resolve templates (defaults to $HOME)
+  -n, --no_cache_output         prevent generation of the default $HOME/.cache/juiced.color file
+  -f, --stout_output_format     stdout output format (defaults to text) [text, json, yaml, toml, summary]
+  -h, --help                    displays help message
+
 ```
 
 Notes on argument syntax (inherited from `zig-args`):
@@ -80,8 +81,9 @@ Using the reference image [test.png](test.png):
 
 ### Console
 
-For every run, `color_juicer` prints the raw list of extracted colors (in clustering/partition-size order) followed by the contrast reference color and the final, contrast-sorted palette:
+For every run, `color_juicer` prints the extracted colors pallete in a configurable format. By default it outputs a `summary` in the form:
 
+- `summary`:
 
 > Image_path: test.png
 >
@@ -144,6 +146,64 @@ For every run, `color_juicer` prints the raw list of extracted colors (in cluste
 (colors are printed with real ANSI 24-bit color escapes in an actual terminal — the swatches above are just their hex values for reference.)
 
 `pN` are the extracted palette colors, sorted from most- to least-contrasting against `--contrast`; `cN` are each `pN`'s OKLCH complementary color, at the same index.
+
+Using the flag `--stout_output_format` (`-f`) the output in ***stdout*** can be changed to output the color pallete in  `text`, `json`, `yml` and `toml` format:
+
+- `text`:
+
+```txt
+p1 #EFD6A4
+p2 #ADAE97
+p3 #437D94
+p4 #937E58
+p5 #4B534B
+p6 #1D2731
+c1 #C2D9FF
+c2 #ABA9C0
+c3 #976751
+c4 #6E82A5
+c5 #554D55
+c6 #2E2419
+```
+
+- `json`:
+
+```json
+{
+    "p": [ "#CDC7A5", "#AC9373", "#447E95", "#77704D", "#3C4749", "#1B242E"] ,
+    "c": [ "#BFC3E4", "#819AB9", "#986852", "#686D8D", "#4C4240", "#2A2117"]
+}
+```
+
+- `yaml`:
+
+```yaml
+colors:
+  p:
+    - "#F0D6A5"
+    - "#A58964"
+    - "#AAB5A2"
+    - "#427D94"
+    - "#5E604C"
+    - "#222D36"
+
+  c:
+    - "#C1DAFF"
+    - "#7491B4"
+    - "#B7ACBF"
+    - "#976751"
+    - "#5E5B6E"
+    - "#342920"
+```
+
+- `toml`:
+
+```toml
+[colors]
+p = [ "#EFD6A4", "#A38863", "#AAB4A1", "#427D95", "#5B5E4C", "#212C35" ]
+c = [ "#C2D9FF", "#748FB2", "#B6ABBE", "#986750", "#5D596A", "#33281F" ]
+```
+
 
 ### `$HOME/.cache/juiced.color`
 

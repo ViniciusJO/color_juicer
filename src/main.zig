@@ -214,7 +214,7 @@ const Flags = struct {
     templates_path: ?[]const u8 = null,
     output_reference_path: ?[]const u8 = null,
     no_cache_output: bool = false,
-    stout_output_format: enum { sumary, json, text, yaml } = .sumary,
+    stout_output_format: enum { summary, json, text, yaml, toml } = .summary,
     help: bool = false,
 
     pub const shorthands = .{
@@ -236,7 +236,7 @@ const Flags = struct {
             .templates_path = "path for the template folder",
             .output_reference_path = "reference base path to resolve templates (defaults to $HOME)",
             .no_cache_output = "prevent generation of the default $HOME/.cache/juiced.color file",
-            .stout_output_format = "stdout output format (defaults to text)",
+            .stout_output_format = "stdout output format (defaults to text) [text, json, yaml, toml, summary]",
             .help = "displays help message",
         },
     };
@@ -327,7 +327,7 @@ pub fn main(init: std.process.Init) !void {
         .pixels = undefined,
     };
 
-    try stdout.print("Image_path: {s}\n", .{ input_image.path });
+    if(args.options.stout_output_format == .summary) try stdout.print("Image_path: {s}\n", .{ input_image.path });
 
     // const down_c_ptr = stb_image_resize.stbir_resize_uint8_linear(
     const down_c_ptr = stb.image.resize_uint8_linear(
@@ -341,7 +341,8 @@ pub fn main(init: std.process.Init) !void {
     defer std.c.free(down_c_ptr.?);
     downsampled.pixels = down_c_ptr[0..@as(usize, @intCast(downsampled.width*downsampled.height*downsampled.channels))];
 
-    try stdout.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\nDown:  Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
+    if(args.options.stout_output_format == .summary)
+        try stdout.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\nDown:  Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
     // try stdout.print("down_length: {} bytes\n", .{ downsampled.pixels.len });
 
     // if(write_downsampled_image) _ = stb_image_write.stbi_write_png(
@@ -380,11 +381,13 @@ pub fn main(init: std.process.Init) !void {
         if(m.*.partition_size == 0) m.*.color = means[0].color;
     }
 
-    try stdout.print("Extracted_colors:\n\n", .{});
-    for (means) |m| try m.print_color(alloc, io);
-    try stdout.print("\n", .{});
+    if(args.options.stout_output_format == .summary) {
+        try stdout.print("Extracted_colors:\n\n", .{});
+        for (means) |m| try m.print_color(alloc, io);
+        try stdout.print("\n", .{});
+    }
 
-    { // print contrast color
+    if(args.options.stout_output_format == .summary) { // print contrast color
         try stdout.print("Contrast_color: ", .{});
         var arena_ = std.heap.ArenaAllocator.init(alloc);
         defer arena_.deinit();
@@ -444,10 +447,11 @@ pub fn main(init: std.process.Init) !void {
         .primaries = primary,
         .complementaries = complementary,
     };
-
-    try stdout.print("\nPallete:\n\n", .{});
-    try pallete.print(alloc, io);
-    try stdout.print("\n", .{});
+    if(args.options.stout_output_format == .summary) {
+        try stdout.print("\nPallete:\n\n", .{});
+        try pallete.print(alloc, io);
+        try stdout.print("\n", .{});
+    }
 
     const user_home = init.environ_map.get("HOME");
     if(!args.options.no_cache_output) if(user_home) |h| {
@@ -458,9 +462,10 @@ pub fn main(init: std.process.Init) !void {
         defer out_file.close(io);
 
         var out_writer = out_file.writer(io, &.{});
-        try pallete.print_out(&out_writer.interface);
+        try pallete.print_text_out(&out_writer.interface);
 
-        try stdout.print("juiced_colors: {s}\n", .{out_path});
+        if(args.options.stout_output_format == .summary)
+            try stdout.print("juiced_colors: {s}\n", .{out_path});
     };
 
     if(args.options.templates_path) |in_path| {
@@ -476,7 +481,7 @@ pub fn main(init: std.process.Init) !void {
             std.process.exit(1);
         };
         // TODO: verify if the realpath points to actual dirs
-        try stdout.print("TEMPLATE__IN: {s}\n", .{realpath_in_buf[0..inx]});
+        if(args.options.stout_output_format == .summary) try stdout.print("TEMPLATE__IN: {s}\n", .{realpath_in_buf[0..inx]});
         var in  = try std.Io.Dir.openDirAbsolute(io, realpath_in_buf[0..inx], .{ .iterate = true, .access_sub_paths = true });
         defer in.close(io);
 
@@ -486,12 +491,23 @@ pub fn main(init: std.process.Init) !void {
             std.process.exit(1);
         };
         // TODO: verify if the realpath points to actual dirs
-        try stdout.print("TEMPLATE_OUT: {s}\n\n", .{realpath_out_buf[0..outx]});
+        if(args.options.stout_output_format == .summary) try stdout.print("TEMPLATE_OUT: {s}\n\n", .{realpath_out_buf[0..outx]});
         var out = try std.Io.Dir.openDirAbsolute(io, realpath_out_buf[0..outx], .{ .iterate = true, .access_sub_paths = true });
         defer out.close(io);
 
-        try stdout.print("Generating: files from templates...\n\n", .{});
-        try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallete);
+        if(args.options.stout_output_format == .summary)
+            try stdout.print("Generating: files from templates...\n\n", .{});
+        try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallete, if(args.options.stout_output_format == .summary) stdout else null);
+    }
+
+    if(args.options.stout_output_format != .summary) {
+        switch(args.options.stout_output_format) {
+            .text    => try pallete.print_text_out(stdout),
+            .json    => try pallete.print_json_out(stdout),
+            .yaml    => try pallete.print_yaml_out(stdout),
+            .toml    => try pallete.print_toml_out(stdout),
+            .summary => unreachable,
+        }
     }
 }
 

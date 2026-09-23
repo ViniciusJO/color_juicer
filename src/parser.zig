@@ -87,6 +87,7 @@ pub fn iterate_dir_generating_template(
     dir: std.Io.Dir,
     level: u8,
     pallet: Pallete,
+    stream: ?*std.Io.Writer,
 ) !void {
     var iterable_dir = try dir.walk(allocator);
     while (try iterable_dir.next(io)) |entry| {
@@ -94,14 +95,14 @@ pub fn iterate_dir_generating_template(
             // std.debug.print("<<skip-{s}>>\n", .{entry.path});
             continue;
         }
-        std.debug.print("{s}{s} {s}\n", .{
+        if(stream) |s| try s.print("{s}{s} {s}\n", .{
             padding(allocator, level),
             switch(entry.kind) {
                 .file => "\x1b[1;33m \x1b[0m",
                 .directory => "\x1b[1;34m \x1b[0m",
                 else => "  "
             },
-            entry.path, 
+            entry.path,
         });
         // Print the name of each entry
         switch(entry.kind) {
@@ -125,7 +126,7 @@ pub fn iterate_dir_generating_template(
                         break :catcher try ref.openDir(io, entry.path, .{ .iterate = true });
                     };
                 defer out_dir.close(io);
-                try iterate_dir_generating_template(allocator, io, out_dir, template_dir, level + 1, pallet);
+                try iterate_dir_generating_template(allocator, io, out_dir, template_dir, level + 1, pallet, stream);
             },
             else => {}
         }
