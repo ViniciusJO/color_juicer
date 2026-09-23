@@ -1,6 +1,7 @@
 const std = @import("std");
 const args_parser = @import("args_parser");
 
+// TODO: encapsulate only used stb functions in a module for smaller binary (??)
 const stb_image = @import("stbi");
 const stb_image_write = @import("stbiw");
 const stb_image_resize = @import("stbir");
@@ -17,6 +18,7 @@ const Image = struct {
     height: c_int,
     channels: c_int,
     pixels: []u8,
+    path: []const u8 = "",
 };
 
 const Mean = struct {
@@ -51,19 +53,19 @@ pub fn kmeanspp_init(alloc: std.mem.Allocator, io: std.Io, m: *[]Mean, pixels: *
 
     var ar = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer ar.deinit();
-    std.debug.print("random_i: {} {any} {any} {s}\n", .{
-        first_index,
-        first_pixel,
-        m.*[0].color,
-        Color.RGBA.init(.{ .vec = m.*[0].color }).to_rgb_str()
-    });
+    // std.debug.print("\nrandom_i: {} {any} {any} {s}\n", .{
+    //     first_index,
+    //     first_pixel,
+    //     m.*[0].color,
+    //     Color.RGBA.init(.{ .vec = m.*[0].color }).to_rgb_str()
+    // });
 
     var distances = try alloc.alloc(f64, n);
     defer alloc.free(distances);
 
     for (1..k) |i| {
         for (0..pixels.len) |j| {
-            // std.debug.print("pixel: {}\n", .{j});
+            // stdout.print("pixel: {}\n", .{j});
             // 221178
             const p = pixels.*[j];
             var min_dist: f64 = std.math.inf(f64);
@@ -159,17 +161,17 @@ fn randomFloat(io: std.Io) !f64 {
     return @as(f64, @floatFromInt(buf)) / @as(f64, @floatFromInt(std.math.maxInt(u64)));
 }
 
-fn usage(name: []const u8) void {
-    // std.debug.print("Usage {s}:\n\t{s} filepath <#means> <downsampling_factor>\n", .{name, name});
-    std.debug.print("Usage:\t{s} filepath\n", .{name});
-}
+// fn usage(name: []const u8, stream: std.Io.Writer) void {
+//     // stdout.print("Usage {s}:\n\t{s} filepath <#means> <downsampling_factor>\n", .{name, name});
+//     stream.print("Usage:\t{s} filepath\n", .{name}) catch {};
+// }
 
-const Args = struct {
-    image_path: []const u8,
-    contrast: ?[]const u8,
-    templates_path: ?[]const u8,
-    output_reference_path: ?[]const u8,
-};
+// const Args = struct {
+//     image_path: []const u8,
+//     contrast: ?[]const u8,
+//     templates_path: ?[]const u8,
+//     output_reference_path: ?[]const u8,
+// };
 
 const StdIO = struct {
     in: *std.Io.Reader,
@@ -177,36 +179,66 @@ const StdIO = struct {
     err: *std.Io.Writer,
 };
 
-const Kit = struct {
-    const Self = @This();
+// const Kit = struct {
+//     const Self = @This();
+//
+//     io: std.Io,
+//     args: Args,
+//     stdio: StdIO,
+//     gpa: std.mem.Allocator,
+//     arena: std.heap.ArenaAllocator,
+//
+//     pub fn init(io: std.Io, arguments: Args) Self {
+//         var stdin_reader = std.Io.File.stdin().reader(io, &.{});
+//         var stdout_writer = std.Io.File.stdout().writer(io, &.{});
+//         var stderr_writer = std.Io.File.stderr().writer(io, &.{});
+//
+//         const stdin = &stdin_reader.interface;
+//         const stdout = &stdout_writer.interface;
+//         const stderr = &stderr_writer.interface;
+//
+//         return .{
+//             .io = io,
+//             .args = arguments,
+//             .gpa = std.heap.page_allocator,
+//             .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+//             .stdio = StdIO { .in = stdin, .out = stdout, .err = stderr, }
+//         };
+//     }
+// };
 
-    io: std.Io,
-    args: Args,
-    stdio: StdIO,
-    gpa: std.mem.Allocator,
-    arena: std.heap.ArenaAllocator,
+const Flags = struct {
+    colors_count: u8 = 6,
+    contrast: []const u8 = "#000000",
+    templates_path: ?[]const u8 = null,
+    output_reference_path: ?[]const u8 = null,
+    no_cache_output: bool = false,
+    help: bool = false,
 
-    pub fn init(io: std.Io, arguments: Args) Self {
-        var stdin_reader = std.Io.File.stdin().reader(io, &.{});
-        var stdout_writer = std.Io.File.stdout().writer(io, &.{});
-        var stderr_writer = std.Io.File.stderr().writer(io, &.{});
+    pub const shorthands = .{
+        .@"#" = "colors_count",
+        .c = "contrast",
+        .t = "templates_path",
+        .o = "output_reference_path",
+        .n = "no_cache_output",
+        .h = "help",
+    };
 
-        const stdin = &stdin_reader.interface;
-        const stdout = &stdout_writer.interface;
-        const stderr = &stderr_writer.interface;
-
-        return .{
-            .io = io,
-            .args = arguments,
-            .gpa = std.heap.page_allocator,
-            .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-            .stdio = StdIO { .in = stdin, .out = stdout, .err = stderr, }
-        };
-    }
+    pub const meta = .{
+        .usage_summary = "<image-path>",
+        .full_text = @embedFile("usage_description.txt"),
+        .option_docs = .{
+            .colors_count = "number of colors to output (defaults to 6)",
+            .contrast = "color on wich to calculate contrast (defaults to #000000)",
+            .templates_path = "path for the template folder",
+            .output_reference_path = "reference base path to resolve templates (defaults to $HOME)",
+            .no_cache_output = "prevent generation of the default $HOME/.cache/juiced.color file",
+            .help = "displays help message",
+        },
+    };
 };
 
 pub fn main(init: std.process.Init) !void {
-
     const alloc = init.gpa;
     const io = init.io;
 
@@ -219,55 +251,62 @@ pub fn main(init: std.process.Init) !void {
     var stderr_writer = std.Io.File.stderr().writer(io, &.{});
     const stderr = &stderr_writer.interface;
 
-    const args = try init.minimal.args.toSlice(alloc);
-    defer alloc.free(args);
-    errdefer usage(args[0][0..args[0].len]);
+    const args = try args_parser.parseForCurrentProcess(Flags, init, .print);
 
-    var _a: Args = undefined;
-    _a.image_path = if(args.len >= 1) args[1] else {
-        try stderr.print("ERROR: missing required file path\n", .{});
-        try stderr.flush();
+    if(args.options.help) {
+        try args_parser.printHelp(Flags, args.executable_name.?, stdout);
         return;
+    }
+
+    if(args.positionals.len == 0) {
+        std.log.err("missing required file path\n", .{});
+        try args_parser.printHelp(Flags, args.executable_name.?, stderr);
+        return;
+    }
+
+    // TODO: move validation and parsing to Color.RGBA struct
+    var contrast_str = args.options.contrast;
+    const contrast = if(
+        (is_valid_len: for([_]u8{ 3, 4, 6, 8 }) |l| { if(contrast_str.len - 1 == l) break :is_valid_len false; } else true)
+        or contrast_str[0] != '#'
+        or is_hex: for(contrast_str[1..]) |c| { if(!std.ascii.isHex(c)) break :is_hex true; } else false
+    ) {
+        std.log.err("Invalid contrast color: {s}", .{contrast_str});
+        std.process.exit(1);
+    } else block: {
+        contrast_str = contrast_str[1..];
+        const h = try std.fmt.parseInt(u32, contrast_str, 16);
+        const parse_nible_char = struct { pub fn parse(c: u8) u32 { return std.fmt.parseInt(u32, &[1]u8{ c }, 16) catch 0; } }.parse;
+        const value: u32 = switch(contrast_str.len) {
+            3 => parse_nible_char(contrast_str[0]) << 28
+               | 0xF << 24
+               | parse_nible_char(contrast_str[1]) << 20
+               | 0xF << 16
+               | parse_nible_char(contrast_str[2]) << 12
+               | 0xFFF,
+            4 => parse_nible_char(contrast_str[0]) << 28
+               | 0xF << 24
+               | parse_nible_char(contrast_str[1]) << 20
+               | 0xF << 16
+               | parse_nible_char(contrast_str[2]) << 12
+               | 0xF << 8
+               | parse_nible_char(contrast_str[3]),
+            6 => h << 8 | 0xFF,
+            8 => h,
+            else => unreachable,
+        };
+        break :block Color.RGBA.init(.{ .hex = value });
     };
 
-    // const means_quant = if(args.len >= 2) std.fmt.parseInt(usize, args[2], 10) catch return error.InvalidArgument else 10;
-    // const fac = if(args.len >= 3) std.fmt.parseInt(u8, args[3], 10) catch return error.InvalidArgument else 4;
-
-    const arguments = _a;
-
-    // const kit = Kit{
-    //     .io = io,
-    //     .args = arguments,
-    //     .gpa = alloc,
-    //     .arena = std.heap.ArenaAllocator.init(alloc),
-    //     .stdio = StdIO { .in = stdin, .out = stdout, .err = stderr, }
-    // };
-
-    // const kit = Kit.init(io,arguments);
-    // _ = kit;
-
-
-    // const input = try kit.stdio.in.takeDelimiterExclusive('\n');//readSliceShort(&bff);
-    //
-    // try kit.stdio.out.print("\nTEST: {s}\n", .{ input });
-
-    // if(true) return;
-
-
-
-
-    const means_quant = 6;
+    const means_quant = args.options.colors_count;
     const fac = 5;
     const precision = 0.01;
-    // const precision = 1;
-    // const precision = 100;
-    // const precision = 1000;
-    // #112313
 
     var input_image: Image = undefined;
+    input_image.path = args.positionals[0];
 
     const input_c_ptr = stb_image.stbi_load(
-        arguments.image_path.ptr,
+        input_image.path.ptr,
         &input_image.width,
         &input_image.height,
         &input_image.channels,
@@ -283,6 +322,8 @@ pub fn main(init: std.process.Init) !void {
         .pixels = undefined,
     };
 
+    try stdout.print("Image_path: {s}\n", .{ input_image.path });
+
     const down_c_ptr = stb_image_resize.stbir_resize_uint8_linear(
         input_image.pixels.ptr,
         input_image.width, input_image.height, input_image.width*input_image.channels*@sizeOf(u8),
@@ -294,8 +335,8 @@ pub fn main(init: std.process.Init) !void {
     defer std.c.free(down_c_ptr.?);
     downsampled.pixels = down_c_ptr[0..@as(usize, @intCast(downsampled.width*downsampled.height*downsampled.channels))];
 
-    std.debug.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\n Down: Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
-    std.debug.print("down_length: {} bytes\n", .{ downsampled.pixels.len });
+    try stdout.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\nDown:  Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
+    // try stdout.print("down_length: {} bytes\n", .{ downsampled.pixels.len });
 
     if(write_downsampled_image) _ = stb_image_write.stbi_write_png(
         "dout.png",
@@ -332,30 +373,44 @@ pub fn main(init: std.process.Init) !void {
         if(m.*.partition_size == 0) m.*.color = means[0].color;
     }
 
-    // std.debug.print("\nMEANS:\n", .{});
+    try stdout.print("Extracted_colors:\n\n", .{});
     for (means) |m| try m.print_color(alloc, io);
-    // std.debug.print("\n\n", .{});
+    try stdout.print("\n", .{});
 
-    const color_dist_square = struct { fn color_dist(_clr: Color.RGBA) u64 {
-        const clr = [_]u64{ _clr.r, _clr.g, _clr.b, _clr.a };
+    { // print contrast color
+        try stdout.print("Contrast_color: ", .{});
+        var arena_ = std.heap.ArenaAllocator.init(alloc);
+        defer arena_.deinit();
+        try Pallete.print_color(arena_.allocator(), stdout, contrast);
+        try stdout.print("\n", .{});
+    }
+
+    const color_dist_square = struct { fn color_dist(clr1: Color.RGBA, clr2: Color.RGBA) u64 {
+        const clr = [_]u64{
+            @intCast(@abs(@as(i16, @intCast(clr1.r)) - clr2.r)),
+            @intCast(@abs(@as(i16, @intCast(clr1.g)) - clr2.g)),
+            @intCast(@abs(@as(i16, @intCast(clr1.b)) - clr2.b)),
+            @intCast(@abs(@as(i16, @intCast(clr1.a)) - clr2.a)),
+        };
         return clr[0]*clr[0] + clr[1]*clr[1] + clr[2]*clr[2];
     }}.color_dist;
 
-    std.sort.heap(Mean, means, {}, struct {
-        pub fn cmp(_: void, a: Mean, b: Mean) bool {
+    // FIX: sort by most contrastant
+    std.sort.heap(Mean, means, contrast, struct {
+        pub fn cmp(contrast_: Color.RGBA, a: Mean, b: Mean) bool {
             const __a = Color.RGBA.init(.{ .vec = a.color });
             const __b = Color.RGBA.init(.{ .vec = b.color });
-            const c1_ = color_dist_square(__a);
-            const c2_ = color_dist_square(__b);
+            const c1_ = @as(f32, @floatFromInt(color_dist_square(__a, contrast_)));
+            const c2_ = @as(f32, @floatFromInt(color_dist_square(__b, contrast_)));
 
             const a_ = __a.to_lch();
             const b_ = __b.to_lch();
-            const c1 = a_.c/a_.l*@as(f32, @floatFromInt(c1_));
-            const c2 = b_.c/b_.l*@as(f32, @floatFromInt(c2_));
+            const c_ = contrast_.to_lch();
 
-            return
-                a.partition_size > b.partition_size or
-                c1 > c2;
+            const s1 = (a_.c - c_.c)*(a_.l - c_.l)*(c1_);
+            const s2 = (b_.c - c_.c)*(b_.l - c_.l)*(c2_);
+
+            return s2 < s1;
         }
     }.cmp);
 
@@ -379,43 +434,58 @@ pub fn main(init: std.process.Init) !void {
     // }
 
     const pallete = Pallete{
-        .primaries = &[_]*Color.RGBA{ &primary[0], &primary[1], &primary[2], },
-        .complementaries = &[_]*Color.RGBA{ &complementary[0],  &complementary[1], &complementary[2], },
+        .primaries = primary,
+        .complementaries = complementary,
     };
 
     try stdout.print("\nPallete:\n\n", .{});
     try pallete.print(alloc, io);
     try stdout.print("\n", .{});
 
+    const user_home = init.environ_map.get("HOME");
+    if(!args.options.no_cache_output) if(user_home) |h| {
+        const out_path = try std.fs.path.join(alloc, &.{ h, ".cache", "juiced.color" });
+        defer alloc.free(out_path);
 
-    // TODO: get input directory from args
-    const in_path  = "src/.ignore/template";
-    const out_path = "src/.ignore/out";
+        const out_file = try std.Io.Dir.createFileAbsolute(io, out_path, .{ .truncate = true });
+        defer out_file.close(io);
 
-    var realpath_in_buf: [4096]u8 = undefined;
-    const inx = std.Io.Dir.realPathFile(std.Io.Dir.cwd(), init.io, in_path, &realpath_in_buf) catch |err| {
-        std.log.err("Failed to open path \"{s}\": {}", .{ in_path, err });
-        std.process.exit(1);
+        var out_writer = out_file.writer(io, &.{});
+        try pallete.print_out(&out_writer.interface);
+
+        try stdout.print("juiced_colors: {s}\n", .{out_path});
     };
-    // TODO: verify if the realpath points to actual dirs
-    try stdout.print("IN__REALPATH: {s}\n", .{realpath_in_buf[0..inx]});
-    var in  = try std.Io.Dir.openDirAbsolute(io, realpath_in_buf[0..inx], .{ .iterate = true, .access_sub_paths = true });
-    defer in.close(io);
 
-    var realpath_out_buf: [4096]u8 = undefined;
-    const outx = std.Io.Dir.realPathFile(std.Io.Dir.cwd(), init.io, out_path, &realpath_out_buf) catch |err| {
-        std.log.err("Failed to open path \"{s}\": {}", .{ out_path, err });
-        std.process.exit(1);
-    };
-    // TODO: verify if the realpath points to actual dirs
-    try stdout.print("OUT_REALPATH: {s}\n\n", .{realpath_out_buf[0..outx]});
-    var out = try std.Io.Dir.openDirAbsolute(io, realpath_out_buf[0..outx], .{ .iterate = true, .access_sub_paths = true });
-    defer out.close(io);
+    if(args.options.templates_path) |in_path| {
+        const out_path = args.options.output_reference_path orelse user_home orelse {
+            std.log.err("`output_reference_path` not passed and env var `HOME` not available. There is no reference path for resolved templates output.", .{});
+            std.process.exit(1);
+        };
+        // const out_path = "src/.ignore/out";
 
+        var realpath_in_buf: [4096]u8 = undefined;
+        const inx = std.Io.Dir.realPathFile(std.Io.Dir.cwd(), init.io, in_path, &realpath_in_buf) catch |err| {
+            std.log.err("Failed to open template path \"{s}\": {}", .{ in_path, err });
+            std.process.exit(1);
+        };
+        // TODO: verify if the realpath points to actual dirs
+        try stdout.print("TEMPLATE__IN: {s}\n", .{realpath_in_buf[0..inx]});
+        var in  = try std.Io.Dir.openDirAbsolute(io, realpath_in_buf[0..inx], .{ .iterate = true, .access_sub_paths = true });
+        defer in.close(io);
 
-    try stdout.print("Generating: files from templates...\n\n", .{});
-    try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallete);
+        var realpath_out_buf: [4096]u8 = undefined;
+        const outx = std.Io.Dir.realPathFile(std.Io.Dir.cwd(), init.io, out_path, &realpath_out_buf) catch |err| {
+            std.log.err("Failed to open output reference path \"{s}\": {}", .{ out_path, err });
+            std.process.exit(1);
+        };
+        // TODO: verify if the realpath points to actual dirs
+        try stdout.print("TEMPLATE_OUT: {s}\n\n", .{realpath_out_buf[0..outx]});
+        var out = try std.Io.Dir.openDirAbsolute(io, realpath_out_buf[0..outx], .{ .iterate = true, .access_sub_paths = true });
+        defer out.close(io);
 
+        try stdout.print("Generating: files from templates...\n\n", .{});
+        try Parser.iterate_dir_generating_template(arena.allocator(), io, out, in, 0, pallete);
+    }
 }
 
 
@@ -449,9 +519,9 @@ pub fn main(init: std.process.Init) !void {
 
 
     // for (means) |*m| {
-    //     std.debug.print("{any}\n", .{m.*.color});
-    //     std.debug.print("#{x}{x}{x}{x}\n", .{m.*.color[0], m.*.color[1], m.*.color[2], m.*.color[3]});
-    //     // std.debug.print("\n{s}\n", .{try color_string(&"██", m.*.color)});
+    //     stdout.print("{any}\n", .{m.*.color});
+    //     stdout.print("#{x}{x}{x}{x}\n", .{m.*.color[0], m.*.color[1], m.*.color[2], m.*.color[3]});
+    //     // stdout.print("\n{s}\n", .{try color_string(&"██", m.*.color)});
     //     try stdout.print("{} {} {}\n", .{m.*.color[0], m.*.color[1], m.*.color[2]});
     // }
 
@@ -506,14 +576,14 @@ pub fn main(init: std.process.Init) !void {
     // for(0..4) |_| {
     //     for (means.items) |*m| {
     //         const col = m.*.color;
-    //         std.debug.print("{s}", .{try color_string(&"████████████", col)});
+    //         stdout.print("{s}", .{try color_string(&"████████████", col)});
     //     }
-    //     std.debug.print("\n", .{});
+    //     stdout.print("\n", .{});
     // }
     // for (means.items) |*m| {
-    //     std.debug.print("{d:^12}", .{ m.*.partition_size });
+    //     stdout.print("{d:^12}", .{ m.*.partition_size });
     // }
-    // std.debug.print("\n\n", .{});
+    // stdout.print("\n\n", .{});
 
     // {
     //     // var out_writer = std.fs.File.stdout().writer(&buff).interface;
@@ -595,11 +665,11 @@ pub fn main(init: std.process.Init) !void {
         // try out_out_1.print("pterc = #{X}{X}{X}\n", .{ clrs[2].color[0],  clrs[2].color[1], clrs[2].color[2] });
         // try out_out_1.print("pcont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
 
-        // std.debug.print("[dyn_colors]\n", .{});
-        // std.debug.print("prim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
-        // std.debug.print("sec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
-        // std.debug.print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
-        // std.debug.print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
-        // std.debug.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
+        // stdout.print("[dyn_colors]\n", .{});
+        // stdout.print("prim = #{X}{X}{X}\n", .{ clrs[0].color[0],  clrs[0].color[1], clrs[0].color[2] });
+        // stdout.print("sec = #{X}{X}{X}\n", .{ clrs[1].color[0],  clrs[1].color[1], clrs[1].color[2] });
+        // stdout.print("cprim = #{X}{X}{X}\n", .{ cclrs[0].color[0],  cclrs[0].color[1], cclrs[0].color[2] });
+        // stdout.print("csec = #{X}{X}{X}\n", .{ cclrs[1].color[0],  cclrs[1].color[1], cclrs[1].color[2] });
+        // stdout.print("cont = #{X}{X}{X}\n", .{ comp_m[0], comp_m[1], comp_m[2] });
         // try out_writer.flush();
     // }

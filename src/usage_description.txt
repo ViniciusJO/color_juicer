@@ -1,0 +1,8 @@
+Extract colors from image in `image-path`.
+
+If `template_path` is passed, parses template files in the path and its subdirectories for file generation.
+
+The results files will be outputed in `output_reference_path` option or default to the users home directory.
+
+All the filesystem tree under the `template_path` will be replicated on output path, creating directories if
+they dont exists and overwriting files with the same name as the template.
