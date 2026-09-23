@@ -2,9 +2,10 @@ const std = @import("std");
 const args_parser = @import("args_parser");
 
 // TODO: encapsulate only used stb functions in a module for smaller binary (??)
-const stb_image = @import("stbi");
-const stb_image_write = @import("stbiw");
-const stb_image_resize = @import("stbir");
+// const stb_image = @import("stbi");
+// const stb_image_write = @import("stbiw");
+// const stb_image_resize = @import("stbir");
+const stb = @import("stb/bindings.zig");
 
 const Color = @import("color.zig");
 const Vec = @import("vec.zig");
@@ -213,6 +214,7 @@ const Flags = struct {
     templates_path: ?[]const u8 = null,
     output_reference_path: ?[]const u8 = null,
     no_cache_output: bool = false,
+    stout_output_format: enum { sumary, json, text, yaml } = .sumary,
     help: bool = false,
 
     pub const shorthands = .{
@@ -221,6 +223,7 @@ const Flags = struct {
         .t = "templates_path",
         .o = "output_reference_path",
         .n = "no_cache_output",
+        .f = "stout_output_format",
         .h = "help",
     };
 
@@ -233,6 +236,7 @@ const Flags = struct {
             .templates_path = "path for the template folder",
             .output_reference_path = "reference base path to resolve templates (defaults to $HOME)",
             .no_cache_output = "prevent generation of the default $HOME/.cache/juiced.color file",
+            .stout_output_format = "stdout output format (defaults to text)",
             .help = "displays help message",
         },
     };
@@ -305,7 +309,8 @@ pub fn main(init: std.process.Init) !void {
     var input_image: Image = undefined;
     input_image.path = args.positionals[0];
 
-    const input_c_ptr = stb_image.stbi_load(
+    // const input_c_ptr = stb_image.stbi_load(
+    const input_c_ptr = stb.image.load(
         input_image.path.ptr,
         &input_image.width,
         &input_image.height,
@@ -324,7 +329,8 @@ pub fn main(init: std.process.Init) !void {
 
     try stdout.print("Image_path: {s}\n", .{ input_image.path });
 
-    const down_c_ptr = stb_image_resize.stbir_resize_uint8_linear(
+    // const down_c_ptr = stb_image_resize.stbir_resize_uint8_linear(
+    const down_c_ptr = stb.image.resize_uint8_linear(
         input_image.pixels.ptr,
         input_image.width, input_image.height, input_image.width*input_image.channels*@sizeOf(u8),
         null,
@@ -338,7 +344,8 @@ pub fn main(init: std.process.Init) !void {
     try stdout.print("\nInput: Image{{ .width = {}, .height = {}, .channels = {} }}\nDown:  Image{{ .width = {}, .height = {}, .channels = {} }}\n\n", .{ input_image.width, input_image.height, input_image.channels, downsampled.width, downsampled.height, downsampled.channels });
     // try stdout.print("down_length: {} bytes\n", .{ downsampled.pixels.len });
 
-    if(write_downsampled_image) _ = stb_image_write.stbi_write_png(
+    // if(write_downsampled_image) _ = stb_image_write.stbi_write_png(
+    if(write_downsampled_image) _ = stb.image.write_png(
         "dout.png",
         downsampled.width,
         downsampled.height,
